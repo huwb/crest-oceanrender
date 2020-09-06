@@ -83,9 +83,9 @@ namespace Crest
             Start();
         }
 
-        protected override void InitData()
+        protected override bool InitData()
         {
-            base.InitData();
+            if (!base.InitData()) return false;
 
             // Setup the RenderTexture and compute shader for combining
             // different animated wave LODs. As we use a single texture array
@@ -110,8 +110,7 @@ namespace Crest
             _combineShader = ComputeShaderHelpers.LoadShader(ShaderName);
             if (_combineShader == null)
             {
-                enabled = false;
-                return;
+                return false;
             }
             krnl_ShapeCombine = _combineShader.FindKernel("ShapeCombine");
             krnl_ShapeCombine_DISABLE_COMBINE = _combineShader.FindKernel("ShapeCombine_DISABLE_COMBINE");
@@ -122,6 +121,8 @@ namespace Crest
             krnl_ShapeCombine_FLOW_ON_DYNAMIC_WAVE_SIM_ON = _combineShader.FindKernel("ShapeCombine_FLOW_ON_DYNAMIC_WAVE_SIM_ON");
             krnl_ShapeCombine_FLOW_ON_DYNAMIC_WAVE_SIM_ON_DISABLE_COMBINE = _combineShader.FindKernel("ShapeCombine_FLOW_ON_DYNAMIC_WAVE_SIM_ON_DISABLE_COMBINE");
             _combineProperties = new PropertyWrapperCompute();
+
+            return true;
         }
 
         RenderTexture CreateCombineBuffer(RenderTextureDescriptor desc)

@@ -99,9 +99,9 @@ namespace Crest
 #endif
         }
 
-        protected override void InitData()
+        protected override bool InitData()
         {
-            base.InitData();
+            if (!base.InitData()) return false;
 
             int resolution = OceanRenderer.Instance.LodDataResolution;
             var desc = new RenderTextureDescriptor(resolution, resolution, TextureFormat, 0);
@@ -109,6 +109,8 @@ namespace Crest
 
             TextureArrayHelpers.ClearToBlack(_sources);
             TextureArrayHelpers.ClearToBlack(_targets);
+
+            return true;
         }
 
         bool StartInitLight()

@@ -53,12 +53,13 @@ namespace Crest
             Start();
         }
 
-        protected override void InitData()
+        protected override bool InitData()
         {
-            base.InitData();
+            if (!base.InitData()) return false;
 
             _active = new bool[OceanRenderer.Instance.CurrentLodCount];
             for (int i = 0; i < _active.Length; i++) _active[i] = true;
+            return true;
         }
 
         internal override void OnEnable()

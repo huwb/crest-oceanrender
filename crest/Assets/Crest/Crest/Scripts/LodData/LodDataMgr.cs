@@ -56,8 +56,7 @@ namespace Crest
 
         public virtual void Start()
         {
-            InitData();
-            enabled = true;
+            enabled = InitData();
         }
 
         public static RenderTexture CreateLodDataTextures(RenderTextureDescriptor desc, string name, bool needToReadWriteTextureData)
@@ -76,7 +75,7 @@ namespace Crest
             return result;
         }
 
-        protected virtual void InitData()
+        protected virtual bool InitData()
         {
             Debug.Assert(SystemInfo.SupportsRenderTextureFormat(TextureFormat), "The graphics device does not support the render texture format " + TextureFormat.ToString());
 
@@ -85,6 +84,8 @@ namespace Crest
             var resolution = OceanRenderer.Instance.LodDataResolution;
             var desc = new RenderTextureDescriptor(resolution, resolution, TextureFormat, 0);
             _targets = CreateLodDataTextures(desc, SimName, NeedToReadWriteTextureData);
+
+            return true;
         }
 
         public virtual void UpdateLodData()

@@ -147,35 +147,35 @@ namespace Crest
 
         [Tooltip("Water depth information used for shallow water, shoreline foam, wave attenuation, among others."), SerializeField]
         bool _createSeaFloorDepthData = true;
-        public bool CreateSeaFloorDepthData { get { return _createSeaFloorDepthData; } }
+        public bool CreateSeaFloorDepthData => _createSeaFloorDepthData && !_wasLodDataSeaDepthsInitFailure;
 
         [Tooltip("Simulation of foam created in choppy water and dissipating over time."), SerializeField]
-        bool _createFoamSim = true;
-        public bool CreateFoamSim { get { return _createFoamSim; } }
+        internal bool _createFoamSim = true;
+        public bool CreateFoamSim => _createFoamSim && !_wasLodDataFoamInitFailure;
         [PredicatedField("_createFoamSim")]
         public SimSettingsFoam _simSettingsFoam;
 
         [Tooltip("Dynamic waves generated from interactions with objects such as boats."), SerializeField]
         bool _createDynamicWaveSim = false;
-        public bool CreateDynamicWaveSim { get { return _createDynamicWaveSim; } }
+        public bool CreateDynamicWaveSim => _createDynamicWaveSim && !_wasLodDataDynWavesInitFailure;
         [PredicatedField("_createDynamicWaveSim")]
         public SimSettingsWave _simSettingsDynamicWaves;
 
         [Tooltip("Horizontal motion of water body, akin to water currents."), SerializeField]
         bool _createFlowSim = false;
-        public bool CreateFlowSim { get { return _createFlowSim; } }
+        public bool CreateFlowSim => _createFlowSim && !_wasLodDataFlowInitFailure;
         [PredicatedField("_createFlowSim")]
         public SimSettingsFlow _simSettingsFlow;
 
         [Tooltip("Shadow information used for lighting water."), SerializeField]
         bool _createShadowData = false;
-        public bool CreateShadowData { get { return _createShadowData; } }
+        public bool CreateShadowData => _createShadowData && !_wasLodDataShadowInitFailure;
         [PredicatedField("_createShadowData")]
         public SimSettingsShadow _simSettingsShadow;
 
         [Tooltip("Clip surface information for clipping the ocean surface."), SerializeField]
         bool _createClipSurfaceData = false;
-        public bool CreateClipSurfaceData { get { return _createClipSurfaceData; } }
+        public bool CreateClipSurfaceData => _createClipSurfaceData && !_wasLodDataClipSurfaceInitFailure;
         public enum DefaultClippingState
         {
             NothingClipped,
@@ -239,11 +239,17 @@ namespace Crest
         [HideInInspector] public LodTransform _lodTransform;
         [HideInInspector] public LodDataMgrAnimWaves _lodDataAnimWaves;
         [HideInInspector] public LodDataMgrSeaFloorDepth _lodDataSeaDepths;
+        bool _wasLodDataSeaDepthsInitFailure = false;
         [HideInInspector] public LodDataMgrClipSurface _lodDataClipSurface;
+        bool _wasLodDataClipSurfaceInitFailure = false;
         [HideInInspector] public LodDataMgrDynWaves _lodDataDynWaves;
+        bool _wasLodDataDynWavesInitFailure = false;
         [HideInInspector] public LodDataMgrFlow _lodDataFlow;
+        bool _wasLodDataFlowInitFailure = false;
         [HideInInspector] public LodDataMgrFoam _lodDataFoam;
+        bool _wasLodDataFoamInitFailure = false;
         [HideInInspector] public LodDataMgrShadow _lodDataShadow;
+        bool _wasLodDataShadowInitFailure = false;
 
         /// <summary>
         /// The number of LODs/scales that the ocean is currently using.
@@ -409,6 +415,7 @@ namespace Crest
         void CreateDestroySubSystems()
         {
             {
+                // TODO: How should we handle failure of animated waves?
                 if (_lodDataAnimWaves == null)
                 {
                     _lodDataAnimWaves = new LodDataMgrAnimWaves(this);
@@ -421,7 +428,15 @@ namespace Crest
                 if (_lodDataClipSurface == null)
                 {
                     _lodDataClipSurface = new LodDataMgrClipSurface(this);
-                    _lodDatas.Add(_lodDataClipSurface);
+                    _wasLodDataClipSurfaceInitFailure = !_lodDataClipSurface.enabled;
+                    if (_wasLodDataClipSurfaceInitFailure)
+                    {
+                        _lodDataClipSurface = null;
+                    }
+                    else
+                    {
+                        _lodDatas.Add(_lodDataClipSurface);
+                    }
                 }
             }
             else
@@ -439,7 +454,15 @@ namespace Crest
                 if (_lodDataDynWaves == null)
                 {
                     _lodDataDynWaves = new LodDataMgrDynWaves(this);
-                    _lodDatas.Add(_lodDataDynWaves);
+                    _wasLodDataDynWavesInitFailure = !_lodDataDynWaves.enabled;
+                    if (_wasLodDataDynWavesInitFailure)
+                    {
+                        _lodDataDynWaves = null;
+                    }
+                    else
+                    {
+                        _lodDatas.Add(_lodDataDynWaves);
+                    }
                 }
             }
             else
@@ -457,7 +480,15 @@ namespace Crest
                 if (_lodDataFlow == null)
                 {
                     _lodDataFlow = new LodDataMgrFlow(this);
-                    _lodDatas.Add(_lodDataFlow);
+                    _wasLodDataFlowInitFailure = !_lodDataFlow.enabled;
+                    if (_wasLodDataFlowInitFailure)
+                    {
+                        _lodDataFlow = null;
+                    }
+                    else
+                    {
+                        _lodDatas.Add(_lodDataFlow);
+                    }
                 }
 
                 if (FlowProvider != null && !(FlowProvider is QueryFlow))
@@ -491,7 +522,15 @@ namespace Crest
                 if (_lodDataFoam == null)
                 {
                     _lodDataFoam = new LodDataMgrFoam(this);
-                    _lodDatas.Add(_lodDataFoam);
+                    _wasLodDataFoamInitFailure = !_lodDataFoam.enabled;
+                    if (_wasLodDataFoamInitFailure)
+                    {
+                        _lodDataFoam = null;
+                    }
+                    else
+                    {
+                        _lodDatas.Add(_lodDataFoam);
+                    }
                 }
             }
             else
@@ -509,7 +548,15 @@ namespace Crest
                 if (_lodDataSeaDepths == null)
                 {
                     _lodDataSeaDepths = new LodDataMgrSeaFloorDepth(this);
-                    _lodDatas.Add(_lodDataSeaDepths);
+                    _wasLodDataSeaDepthsInitFailure = !_lodDataSeaDepths.enabled;
+                    if (_wasLodDataClipSurfaceInitFailure)
+                    {
+                        _lodDataSeaDepths = null;
+                    }
+                    else
+                    {
+                        _lodDatas.Add(_lodDataSeaDepths);
+                    }
                 }
             }
             else
@@ -527,7 +574,15 @@ namespace Crest
                 if (_lodDataShadow == null)
                 {
                     _lodDataShadow = new LodDataMgrShadow(this);
-                    _lodDatas.Add(_lodDataShadow);
+                    _wasLodDataShadowInitFailure = !_lodDataSeaDepths.enabled;
+                    if (_wasLodDataShadowInitFailure)
+                    {
+                        _lodDataSeaDepths = null;
+                    }
+                    else
+                    {
+                        _lodDatas.Add(_lodDataShadow);
+                    }
                 }
             }
             else
