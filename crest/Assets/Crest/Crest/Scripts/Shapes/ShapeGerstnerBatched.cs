@@ -36,7 +36,7 @@ namespace Crest
 
         public class GerstnerBatch : ILodDataInput
         {
-            public GerstnerBatch(ShapeGerstnerBatched gerstner, int batchIndex, MeshRenderer rend, bool directTowardsPoint)
+            public GerstnerBatch(ShapeGerstnerBatched gerstner, int batchIndex, MeshRenderer rend, bool directTowardsPoint, bool sdfShorelines)
             {
                 _gerstner = gerstner;
                 _batchIndex = batchIndex;
@@ -51,6 +51,12 @@ namespace Crest
                 {
                     _materials[0].material.EnableKeyword(DIRECT_TOWARDS_POINT_KEYWORD);
                     _materials[1].material.EnableKeyword(DIRECT_TOWARDS_POINT_KEYWORD);
+                }
+
+                if (sdfShorelines)
+                {
+                    _materials[0].material.EnableKeyword(SFD_SHORELINES_KEYWORD);
+                    _materials[1].material.EnableKeyword(SFD_SHORELINES_KEYWORD);
                 }
 
                 _rend = rend;
@@ -114,6 +120,24 @@ namespace Crest
         [PredicatedField("_evaluateSpectrumAtRuntime", true)]
         public float[] _phases;
 
+        [Header("Shorelines (Experimental)")]
+        [Tooltip("Generate waves that are directed towards shorelines using a generated signed distance field. Must be set at edit time only, applied on startup. You must enable signed distance fields on the generated depth caches for terrain in order for this to work.")]
+        public bool _sdfShorelines = false;
+        [PredicatedField("_sdfShorelines")]
+        public float _shorelineWavelengthNear = 2.5f;
+        [PredicatedField("_sdfShorelines")]
+        public float _shorelineWavelengthFar = 15f;
+        [PredicatedField("_sdfShorelines")]
+        public float _shorelineLerpDistance = 100.0f;
+        [PredicatedField("_sdfShorelines")]
+        public float _shorelineShorelineWavePeriod = 1.7f;
+        [PredicatedField("_sdfShorelines")]
+        public float _shorelineAmplitude = 0.3f;
+        [PredicatedField("_sdfShorelines")]
+        public float _shorelineChop = 2.0f;
+        [PredicatedField("_sdfShorelines")]
+        public uint _shorelineWavePeriodSeparation = 1;
+
         [SerializeField, Tooltip("Make waves converge towards a point. Must be set at edit time only, applied on startup."), Header("Direct towards point")]
         bool _directTowardsPoint = false;
         [SerializeField, Tooltip("Target point XZ to converge to.")]
@@ -122,6 +146,7 @@ namespace Crest
         Vector2 _pointRadii = new Vector2(100f, 200f);
 
         const string DIRECT_TOWARDS_POINT_KEYWORD = "CREST_DIRECT_TOWARDS_POINT_INTERNAL";
+        const string SFD_SHORELINES_KEYWORD = "CREST_SDF_SHORELINES";
 
         readonly int sp_TwoPiOverWavelengths = Shader.PropertyToID("_TwoPiOverWavelengths");
         readonly int sp_Amplitudes = Shader.PropertyToID("_Amplitudes");
@@ -133,6 +158,14 @@ namespace Crest
         readonly int sp_AttenuationInShallows = Shader.PropertyToID("_AttenuationInShallows");
         readonly int sp_NumWaveVecs = Shader.PropertyToID("_NumWaveVecs");
         readonly int sp_TargetPointData = Shader.PropertyToID("_TargetPointData");
+
+        readonly int sp_ShorelineTwoPiOverWavelengthNear = Shader.PropertyToID("_ShorelineTwoPiOverWavelengthNear");
+        readonly int sp_ShorelineTwoPiOverWavelengthFar = Shader.PropertyToID("_ShorelineTwoPiOverWavelengthFar");
+        readonly int sp_ShorelineLerpDistance = Shader.PropertyToID("_ShorelineLerpDistance");
+        readonly int sp_ShorelineTwoPiOverWavePeriod = Shader.PropertyToID("_ShorelineTwoPiOverWavePeriod");
+        readonly int sp_ShorelineAmplitude = Shader.PropertyToID("_ShorelineAmplitude");
+        readonly int sp_ShorelineChop = Shader.PropertyToID("_ShorelineChop");
+        readonly int sp_ShorelineWavePeriodSeparation = Shader.PropertyToID("_ShorelineWavePeriodSeparation");
 
         // IMPORTANT - this mirrors the constant with the same name in ShapeGerstnerBatch.shader, both must be updated together!
         const int BATCH_SIZE = 32;
@@ -349,7 +382,7 @@ namespace Crest
             _batches = new GerstnerBatch[LodDataMgr.MAX_LOD_COUNT];
             for (int i = 0; i < _batches.Length; i++)
             {
-                _batches[i] = new GerstnerBatch(this, i, rend, _directTowardsPoint);
+                _batches[i] = new GerstnerBatch(this, i, rend, _directTowardsPoint, _sdfShorelines);
             }
 
             // Submit draws to create the Gerstner waves. LODs from 0 to N-2 render the Gerstner waves from their lod. Additionally, any waves
@@ -534,6 +567,22 @@ namespace Crest
             {
                 //Debug.Log($"Batch {batch}, lodIdx {lodIdx}, range: {minWl} -> {2f * minWl}, indices: {startCompIdx} -> {componentIdx}");
                 UpdateBatch(lodIdx, startCompIdx, componentIdx, batch);
+            }
+
+            if (_sdfShorelines)
+            {
+                // apply the data to the shape property
+                for (int i = 0; i < 2; i++)
+                {
+                    var mat = batch.GetMaterial(i);
+                    mat.SetFloat(sp_ShorelineTwoPiOverWavelengthNear, (Mathf.PI * 2.0f) / _shorelineWavelengthNear);
+                    mat.SetFloat(sp_ShorelineTwoPiOverWavelengthFar, (Mathf.Sqrt(_shorelineLerpDistance) * Mathf.PI * 2.0f) / _shorelineWavelengthFar);
+                    mat.SetFloat(sp_ShorelineLerpDistance, _shorelineLerpDistance);
+                    mat.SetFloat(sp_ShorelineTwoPiOverWavePeriod, (Mathf.PI * 2.0f) / _shorelineShorelineWavePeriod);
+                    mat.SetFloat(sp_ShorelineAmplitude, _shorelineAmplitude);
+                    mat.SetFloat(sp_ShorelineChop, _shorelineChop);
+                    mat.SetInt(sp_ShorelineWavePeriodSeparation, (int)_shorelineWavePeriodSeparation);
+                }
             }
         }
 
@@ -901,6 +950,61 @@ namespace Crest
                 );
 
                 isValid = false;
+            }
+
+            // TODO(TRC):Now workout why the ocean can be null... :(
+            if(ocean != null)
+            {
+                if(ocean._simSettingsDepth == null)
+                {
+                    showMessage
+                    (
+                        $"The ocean doesn't have any depth sim settings, please add them and enable signed distance fields to support shoreline waves.",
+                        ValidatedHelper.MessageType.Warning, ocean
+                    );
+
+                }
+                else if(!ocean._simSettingsDepth._enableSignedDistanceFields)
+                {
+                    showMessage
+                    (
+                        $"Please enable signed distance fields on sim settings depth to support shoreline waves.",
+                        ValidatedHelper.MessageType.Warning, ocean._simSettingsDepth
+                    );
+                }
+            }
+
+            {
+                OceanDepthCache[] oceanDepthCaches = FindObjectsOfType<OceanDepthCache>();
+                if (_sdfShorelines)
+                {
+                    foreach (OceanDepthCache oceanDepthCache in oceanDepthCaches)
+                    {
+                        if (!oceanDepthCache._generateSDF)
+                        {
+                            showMessage
+                            (
+                                $"The ocean depth cache {oceanDepthCache.name} isn't configured to generate a signed distance field, which means shoreline waves will not be supported by it.",
+                                ValidatedHelper.MessageType.Warning, oceanDepthCache
+                            );
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (OceanDepthCache oceanDepthCache in oceanDepthCaches)
+                    {
+                        if (oceanDepthCache._generateSDF)
+                        {
+                            showMessage
+                            (
+                                $"The ocean depth cache {oceanDepthCache.name} is configured to generate a signed distance field which is extra generated texture data that won't be used as shorelines are disabled here.",
+                                ValidatedHelper.MessageType.Warning, oceanDepthCache
+                            );
+                        }
+                    }
+
+                }
             }
 
             return isValid;

@@ -21,14 +21,20 @@ half4 _Phases[BATCH_SIZE / 4];
 half4 _ChopAmps[BATCH_SIZE / 4];
 
 float4 _TargetPointData;
+
+half _ShorelineTwoPiOverWavelengthNear;
+half _ShorelineTwoPiOverWavelengthFar;
+float _ShorelineLerpDistance;
+half _ShorelineTwoPiOverWavePeriod;
+half _ShorelineAmplitude;
+half _ShorelineChop;
+uint _ShorelineWavePeriodSeparation;
+
 CBUFFER_END
 
-half4 ComputeGerstner(float2 worldPosXZ, float3 uv_slice)
+half4 ComputeGerstner(float2 worldPosXZ, float3 uv_slice, half depth)
 {
 	float2 displacementNormalized = 0.0;
-
-	// sample ocean depth (this render target should 1:1 match depth texture, so UVs are trivial)
-	const half depth = _LD_TexArray_SeaFloorDepth.Sample(LODData_linear_clamp_sampler, uv_slice).x;
 
 	// Preferred wave directions
 #if CREST_DIRECT_TOWARDS_POINT_INTERNAL
@@ -90,4 +96,84 @@ half4 ComputeGerstner(float2 worldPosXZ, float3 uv_slice)
 	half sss = length(displacementNormalized);
 
 	return _Weight * half4(result, sss);
+}
+
+half4 ComputeShorelineGerstner(float2 worldPosXZ, float3 uv_slice, half2 depth_distance, half2 directionToShore)
+{
+	half depth = depth_distance.x;
+	half distanceToShore = depth_distance.y;
+	const float lerpDistance = _ShorelineLerpDistance;
+	float directionalStrength = 1.0 - clamp(distanceToShore / lerpDistance, 0.0, 1.0);
+	float2 displacementNormalized = 0.0;
+	half3 result = (half3)0.0;
+
+	if(depth > 0.0)
+	{
+		// We lerp between a "near" and "far" wavelength - ish
+		// Just based on experimentation this is a visually-pleasing counter-weight to the
+		// fact that the "length" is done based on the square-root of the distance (this means
+		// larger waves further-away from the shore-which is what we want) - by having a "shorter"
+		// "far" wave-length - we can keep waves more-compressed closer to the shore.
+		// This is a big hack and should probably be replaced with something that actually operates
+		// on real-world values.
+		const float twoPiOverWavelengthNear = _ShorelineTwoPiOverWavelengthNear;
+		const float twoPiOverWavelengthFar = _ShorelineTwoPiOverWavelengthFar;
+		const float twoPiOverWavelength = lerp(twoPiOverWavelengthFar, twoPiOverWavelengthNear, sqrt(directionalStrength));
+
+		const float twoPiOverPeriod = _ShorelineTwoPiOverWavePeriod;
+
+		// We increase the wave amplitude slightly as depth decreases - have tried doing
+		// this based on distance to the shoreline as well - but I think this produces betteer results.
+		const float amplitude = _ShorelineAmplitude/(1.0+sqrt(depth));
+		// Chop increases as depth increases
+		const float chopAmplitude = _ShorelineChop/(1.0+sqrt(depth));
+
+		float angleDistance = distanceToShore;
+		float breakupDampner = 1.0;
+		// An attempt to add-noise or otherwise break-up the visual makeup of the shoreline waves.
+		// {
+		// 	float worldSpaceHeuristic = (worldPosXZ.x + worldPosXZ.y);
+		// 	float lerpFun = (sin(worldSpaceHeuristic * 0.1) + 1.0) * 0.5;
+		// 	if(lerpFun < 0.5)
+		// 	{
+		// 		angleDistance += 4.0;
+		// 		breakupDampner = lerp(0, 1, lerpFun - 0.1);
+		// 	}
+		// }
+
+		// The wave-angle is calculated using the square root of the distance to the shoreline in order
+		// to make waves further-from the shoreline spread further-apart. However we slightlly counteract this
+		// using the lerping above. A bit odd.
+		const float angle = (twoPiOverWavelength * sqrt(angleDistance)) + (_CrestTime * twoPiOverPeriod);
+		result.y = amplitude * cos(angle);
+
+		// We can make it so that waves come in multiples of a given period :)
+		// TODO(TRC): Implement lerping to make it less discontinuous and make it so that noise can a factor here.
+		// (eg - have overlappng and different wave phases at different parts of the wavefront).
+		const int wavePeriodSeparation = _ShorelineWavePeriodSeparation;
+
+		const float pi = 3.14;
+		if(floor((angle + (pi + 0.5)) / ( 2.0 * pi)) % wavePeriodSeparation != 0)
+		{
+			breakupDampner = 0.0;
+		}
+
+		// We tip the top of the waves forwards slightly the closer to the shoreline we are
+		// to simulate the drag the bottom of the waves experience compared-with the top.
+		result.xz = chopAmplitude * directionToShore * sin(angle) * result.y;
+
+
+		// We intentially slightly increase the height of the bottom of the wave as the depth
+		// decreases in order to prevent it from intersecting with the terrain - a hack but it kind-of
+		// works. :)
+		result.y += lerp(0, ((amplitude + 0.1) / (1.0 + depth)), sqrt((1.0 - result.y) * 0.5));
+
+
+		// Dampen waves really-close to the shoreline so that the "naturally" fade away instead of intersecting with the terrain
+		const float boundarySafeDistance = 0.1; // distance within which shore-lines should be stifled
+		const float boundaryLerpDampenLength = 6.0; // distance over which we should start dampening shoreline waves
+		result.xyz = lerp(0, result.xyz, saturate((distanceToShore / boundaryLerpDampenLength) - boundarySafeDistance));
+		result.xyz *= breakupDampner;
+	}
+	return _Weight * half4(result, 0.0) * directionalStrength;
 }

@@ -64,7 +64,6 @@ Shader "Crest/Inputs/Animated Waves/Gerstner Batch Geometry"
 			Varyings Vert(Attributes input)
 			{
 				Varyings o;
-				
 
 				float3 worldPos = mul(unity_ObjectToWorld, float4(input.positionOS, 1.0)).xyz;
 				// Correct for displacement
@@ -98,8 +97,9 @@ Shader "Crest/Inputs/Animated Waves/Gerstner Batch Geometry"
 				float r_l1 = max(offset.x, offset.y);
 				wt *= saturate(1.0 - (r_l1 - (0.5 - _FeatherWidth)) / _FeatherWidth);
 #endif
-
-				return wt * ComputeGerstner(input.worldPosXZ_uv.xy, input.uv_slice_wt.xyz);
+				// sample ocean depth (this render target should 1:1 match depth texture, so UVs are trivial)
+				const half depth = _LD_TexArray_SeaFloorDepth.Sample(LODData_linear_clamp_sampler, input.uv_slice_wt.xyz).x;
+				return wt * ComputeGerstner(input.worldPosXZ_uv.xy, input.uv_slice_wt.xyz, depth);
 			}
 			ENDCG
 		}
