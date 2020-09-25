@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6fcc1742c5d877741b8e82fe2bb66a75, type: 3}
+  m_Name: SimSettingsAnimatedWaves
+  m_EditorClassIdentifier: 
+  _attenuationInShallows: 0.75
+  _collisionSource: 2
+  _maxQueryCount: 4096
