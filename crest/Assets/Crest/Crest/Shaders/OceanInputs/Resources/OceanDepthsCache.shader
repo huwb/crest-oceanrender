@@ -18,12 +18,12 @@ Shader "Crest/Inputs/Depth/Cached Depths"
 			// To confuse matters further, ocean depth is now more like 'sea floor altitude' - a height above a deep water value,
 			// so values are increasing in Y and we need to take the MAX of all depths.
 			BlendOp Min
-			ColorMask R
+			ColorMask RG
 
 			CGPROGRAM
 			#pragma vertex Vert
 			#pragma fragment Frag
-		
+
 			#include "UnityCG.cginc"
 
 			sampler2D _MainTex;
@@ -54,7 +54,7 @@ Shader "Crest/Inputs/Depth/Cached Depths"
 
 			half4 Frag(Varyings input) : SV_Target
 			{
-				return half4(tex2D(_MainTex, input.uv).x, 0.0, 0.0, 0.0);
+				return tex2D(_MainTex, input.uv);
 			}
 			ENDCG
 		}

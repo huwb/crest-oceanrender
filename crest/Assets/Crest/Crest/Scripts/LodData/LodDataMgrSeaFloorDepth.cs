@@ -7,13 +7,15 @@ using UnityEngine.Rendering;
 
 namespace Crest
 {
+    using SettingsType = SimSettingsDepth;
+
     /// <summary>
     /// Renders depth of the ocean (height of sea level above ocean floor), by rendering the relative height of tagged objects from top down.
     /// </summary>
     public class LodDataMgrSeaFloorDepth : LodDataMgr
     {
         public override string SimName { get { return "SeaFloorDepth"; } }
-        public override RenderTextureFormat TextureFormat { get { return RenderTextureFormat.RHalf; } }
+        public override RenderTextureFormat TextureFormat { get { return Settings._enableSignedDistanceFields ? RenderTextureFormat.RGHalf : RenderTextureFormat.RHalf; } }
         protected override bool NeedToReadWriteTextureData { get { return false; } }
 
         bool _targetsClear = false;
@@ -21,8 +23,24 @@ namespace Crest
         public const string ShaderName = "Crest/Inputs/Depth/Cached Depths";
 
         // We want the null colour to be the depth where wave attenuation begins (1000 metres)
-        readonly static Color s_nullColor = Color.red * 1000f;
+        readonly static Color s_nullColor = new Color(1000f, 1000f, 0f, 0f);
         static Texture2DArray s_nullTexture2DArray;
+
+        SettingsType _defaultSettings;
+        public SettingsType Settings
+        {
+            get
+            {
+                if (_ocean._simSettingsDepth != null) return _ocean._simSettingsDepth;
+
+                if (_defaultSettings == null)
+                {
+                    _defaultSettings = ScriptableObject.CreateInstance<SettingsType>();
+                    _defaultSettings.name = SimName + " Auto-generated Settings";
+                }
+                return _defaultSettings;
+            }
+        }
 
         public LodDataMgrSeaFloorDepth(OceanRenderer ocean) : base(ocean)
         {

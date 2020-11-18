@@ -1,0 +1,31 @@
+﻿// Crest Ocean System
+
+// This file is subject to the MIT License as seen in the root of this folder structure (LICENSE)
+
+// An implementation of the Jump Flood algorithm by Rong and Tan
+// Source: https://www.comp.nus.edu.sg/~tants/jfa.html
+
+#pragma kernel SdfApply
+
+#include "../SdfShared.hlsl"
+
+uint _textureDimension;
+float4x4 _projectionToWorld;
+
+Texture2D<float2>   _FromTexture;
+RWTexture2D<float2> _ToTexture;
+
+[numthreads(8,8,1)]
+void SdfApply(uint3 id : SV_DispatchThreadID)
+{
+	float2 result = float2(0.0, 0.0);
+	float2 nearestShorePos = _FromTexture[id.xy];
+
+	float2 currentPosition = IDtoWorld(id.xy, _textureDimension, _projectionToWorld);
+	float2 displacementFromShore = nearestShorePos - currentPosition;
+
+	result.x = _ToTexture[id.xy].x;
+	result.y = length(displacementFromShore);
+
+	_ToTexture[id.xy] = result;
+}

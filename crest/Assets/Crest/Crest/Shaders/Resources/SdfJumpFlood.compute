@@ -1,0 +1,69 @@
+﻿// Crest Ocean System
+
+// This file is subject to the MIT License as seen in the root of this folder structure (LICENSE)
+
+// An implementation of the Jump Flood algorithm by Rong and Tan
+// Source: https://www.comp.nus.edu.sg/~tants/jfa.html
+
+#pragma kernel SdfJumpFlood
+
+#include "../SdfShared.hlsl"
+
+uint _jumpSize;
+uint _textureDimension;
+float4x4 _projectionToWorld;
+
+Texture2D<float2>   _FromTexture;
+RWTexture2D<float2> _ToTexture;
+
+[numthreads(8,8,1)]
+void SdfJumpFlood(uint3 id : SV_DispatchThreadID)
+{
+	float2 currentNearestPoint = _FromTexture[id.xy];
+
+	bool rightIsInBounds = _textureDimension  - _jumpSize > id.x;
+	bool upIsInBounds    = _textureDimension  - _jumpSize > id.y;
+	bool leftIsInBounds  = id.x >= _jumpSize;
+	bool downIsInBounds  = id.y >= _jumpSize;
+
+	float2 candidatePositions[8];
+	candidatePositions[0] = upIsInBounds                      ? _FromTexture[id.xy + uint2(0                ,         _jumpSize)] : currentNearestPoint;
+	candidatePositions[1] = upIsInBounds && rightIsInBounds   ? _FromTexture[id.xy + uint2(_jumpSize        ,         _jumpSize)] : currentNearestPoint;
+	candidatePositions[2] = rightIsInBounds                   ? _FromTexture[id.xy + uint2(_jumpSize        ,                 0)] : currentNearestPoint;
+	candidatePositions[3] = rightIsInBounds && downIsInBounds ? _FromTexture[id.xy + uint2(_jumpSize        , - (int) _jumpSize)] : currentNearestPoint;
+	candidatePositions[4] = downIsInBounds                    ? _FromTexture[id.xy + uint2(0                , - (int) _jumpSize)] : currentNearestPoint;
+	candidatePositions[5] = downIsInBounds && leftIsInBounds  ? _FromTexture[id.xy + uint2(- (int) _jumpSize, - (int) _jumpSize)] : currentNearestPoint;
+	candidatePositions[6] = leftIsInBounds                    ? _FromTexture[id.xy + uint2(- (int) _jumpSize,                 0)] : currentNearestPoint;
+	candidatePositions[7] = leftIsInBounds && upIsInBounds    ? _FromTexture[id.xy + uint2(- (int) _jumpSize,         _jumpSize)] : currentNearestPoint;
+
+	{
+		float2 currentPosition = IDtoWorld(id.xy, _textureDimension, _projectionToWorld);
+
+		float currentDistSq;
+		{
+			float2 currentDisplacementFromShore = currentNearestPoint - currentPosition;
+			currentDistSq = dot(currentDisplacementFromShore, currentDisplacementFromShore);
+		}
+		for(int i = 0; i < 8; i++)
+		{
+			if(IsUninitialisedPosition(currentNearestPoint))
+			{
+				currentNearestPoint = candidatePositions[i];
+				continue;
+			}
+
+			float candidateDistSq;
+			{
+				float2 candidateDisplacementFromShore = candidatePositions[i] - currentPosition;
+				candidateDistSq = dot(candidateDisplacementFromShore, candidateDisplacementFromShore);
+			}
+			if(candidateDistSq < currentDistSq)
+			{
+				currentNearestPoint = candidatePositions[i];
+				currentDistSq = candidateDistSq;
+			}
+		}
+	}
+
+	_ToTexture[id.xy] = currentNearestPoint;
+}
