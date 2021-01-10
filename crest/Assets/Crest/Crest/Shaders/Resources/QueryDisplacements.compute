@@ -30,7 +30,9 @@ float3 ComputeDisplacement(float2 undispPos, float minSlice, const float baseSca
 
 	return
 		wt_0 * _LD_TexArray_AnimatedWaves.SampleLevel(LODData_linear_clamp_sampler, uv0, 0).xyz +
-		wt_1 * _LD_TexArray_AnimatedWaves.SampleLevel(LODData_linear_clamp_sampler, uv1, 0).xyz;
+		wt_1 * _LD_TexArray_AnimatedWaves.SampleLevel(LODData_linear_clamp_sampler, uv1, 0).xyz +
+		wt_0 * -_LD_TexArray_SeaFloorDepth.SampleLevel(LODData_linear_clamp_sampler, uv0, 0).y +
+		wt_1 * -_LD_TexArray_SeaFloorDepth.SampleLevel(LODData_linear_clamp_sampler, uv1, 0).y;
 }
 
 [numthreads(GROUP_SIZE, 1, 1)]

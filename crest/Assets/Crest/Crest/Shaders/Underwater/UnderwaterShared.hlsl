@@ -7,18 +7,18 @@
 
 #define CREST_MAX_UPDOWN_AMOUNT 0.8
 
-float IntersectRayWithWaterSurface(const float3 pos, const float3 dir, in const CascadeParams cascadeData)
+float IntersectRayWithWaterSurface(const float seaLevel, const float3 pos, const float3 dir, in const CascadeParams cascadeData)
 {
 	// Find intersection of the near plane and the water surface at this vert using FPI. See here for info about
 	// FPI http://www.huwbowles.com/fpi-gdc-2016/
 
 	// get point at sea level
-	float2 sampleXZ = pos.xz - dir.xz * (pos.y - _OceanCenterPosWorld.y) / dir.y;
+	float2 sampleXZ = pos.xz - dir.xz * (pos.y - seaLevel) / dir.y;
 	float3 disp;
 	//for (int i = 0; i < 6; i++)
 	{
 		// Sample displacement textures, add results to current world pos / normal / foam
-		disp = float3(sampleXZ.x, _OceanCenterPosWorld.y, sampleXZ.y);
+		disp = float3(sampleXZ.x, seaLevel, sampleXZ.y);
 		half sss = 0.;
 		const float3 uv = WorldToUV(sampleXZ, cascadeData, _LD_SliceIndex);
 		SampleDisplacements(_LD_TexArray_AnimatedWaves, uv, 1.0, disp, sss);
@@ -28,7 +28,7 @@ float IntersectRayWithWaterSurface(const float3 pos, const float3 dir, in const 
 	}
 	{
 		// Sample displacement textures, add results to current world pos / normal / foam
-		disp = float3(sampleXZ.x, _OceanCenterPosWorld.y, sampleXZ.y);
+		disp = float3(sampleXZ.x, seaLevel, sampleXZ.y);
 		half sss = 0.;
 		const float3 uv = WorldToUV(sampleXZ, cascadeData, _LD_SliceIndex);
 		SampleDisplacements(_LD_TexArray_AnimatedWaves, uv, 1.0, disp, sss);
@@ -38,7 +38,7 @@ float IntersectRayWithWaterSurface(const float3 pos, const float3 dir, in const 
 	}
 	{
 		// Sample displacement textures, add results to current world pos / normal / foam
-		disp = float3(sampleXZ.x, _OceanCenterPosWorld.y, sampleXZ.y);
+		disp = float3(sampleXZ.x, seaLevel, sampleXZ.y);
 		half sss = 0.;
 		const float3 uv = WorldToUV(sampleXZ, cascadeData, _LD_SliceIndex);
 		SampleDisplacements(_LD_TexArray_AnimatedWaves, uv, 1.0, disp, sss);
@@ -48,7 +48,7 @@ float IntersectRayWithWaterSurface(const float3 pos, const float3 dir, in const 
 	}
 	{
 		// Sample displacement textures, add results to current world pos / normal / foam
-		disp = float3(sampleXZ.x, _OceanCenterPosWorld.y, sampleXZ.y);
+		disp = float3(sampleXZ.x, seaLevel, sampleXZ.y);
 		half sss = 0.;
 		const float3 uv = WorldToUV(sampleXZ, cascadeData, _LD_SliceIndex);
 		SampleDisplacements(_LD_TexArray_AnimatedWaves, uv, 1.0, disp, sss);
@@ -58,7 +58,7 @@ float IntersectRayWithWaterSurface(const float3 pos, const float3 dir, in const 
 	}
 	{
 		// Sample displacement textures, add results to current world pos / normal / foam
-		disp = float3(sampleXZ.x, _OceanCenterPosWorld.y, sampleXZ.y);
+		disp = float3(sampleXZ.x, seaLevel, sampleXZ.y);
 		half sss = 0.;
 		const float3 uv = WorldToUV(sampleXZ, cascadeData, _LD_SliceIndex);
 		SampleDisplacements(_LD_TexArray_AnimatedWaves, uv, 1.0, disp, sss);
@@ -68,7 +68,7 @@ float IntersectRayWithWaterSurface(const float3 pos, const float3 dir, in const 
 	}
 	{
 		// Sample displacement textures, add results to current world pos / normal / foam
-		disp = float3(sampleXZ.x, _OceanCenterPosWorld.y, sampleXZ.y);
+		disp = float3(sampleXZ.x, seaLevel, sampleXZ.y);
 		half sss = 0.;
 		const float3 uv = WorldToUV(sampleXZ, cascadeData, _LD_SliceIndex);
 		SampleDisplacements(_LD_TexArray_AnimatedWaves, uv, 1.0, disp, sss);

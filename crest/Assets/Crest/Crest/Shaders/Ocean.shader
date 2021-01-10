@@ -362,14 +362,13 @@ Shader "Crest/Ocean"
 				}
 
 				// Data that needs to be sampled at the displaced position
+				half seaLevelOffset = 0.0;
 				if (wt_smallerLod > 0.0001)
 				{
 					const float3 uv_slice_smallerLodDisp = WorldToUV(o.worldPos.xz, cascadeData0, _LD_SliceIndex);
 
-					#if _SUBSURFACESHALLOWCOLOUR_ON
+					SampleSeaDepth(_LD_TexArray_SeaFloorDepth, uv_slice_smallerLodDisp, wt_smallerLod, o.lodAlpha_worldXZUndisplaced_oceanDepth.w, seaLevelOffset);
 					// The minimum sampling weight is lower (0.0001) than others to fix shallow water colour popping.
-					SampleSeaDepth(_LD_TexArray_SeaFloorDepth, uv_slice_smallerLodDisp, wt_smallerLod, o.lodAlpha_worldXZUndisplaced_oceanDepth.w);
-					#endif
 
 					#if _SHADOWS_ON
 					if (wt_smallerLod > 0.001)
@@ -382,10 +381,8 @@ Shader "Crest/Ocean"
 				{
 					const float3 uv_slice_biggerLodDisp = WorldToUV(o.worldPos.xz, cascadeData1, _LD_SliceIndex + 1);
 
-					#if _SUBSURFACESHALLOWCOLOUR_ON
+					SampleSeaDepth(_LD_TexArray_SeaFloorDepth, uv_slice_biggerLodDisp, wt_biggerLod, o.lodAlpha_worldXZUndisplaced_oceanDepth.w, seaLevelOffset);
 					// The minimum sampling weight is lower (0.0001) than others to fix shallow water colour popping.
-					SampleSeaDepth(_LD_TexArray_SeaFloorDepth, uv_slice_biggerLodDisp, wt_biggerLod, o.lodAlpha_worldXZUndisplaced_oceanDepth.w);
-					#endif
 
 					#if _SHADOWS_ON
 					if (wt_biggerLod > 0.001)
@@ -394,6 +391,8 @@ Shader "Crest/Ocean"
 					}
 					#endif
 				}
+
+				o.worldPos.y += seaLevelOffset;
 
 				// Foam can saturate
 				o.foam_screenPosXYW.x = saturate(o.foam_screenPosXYW.x);

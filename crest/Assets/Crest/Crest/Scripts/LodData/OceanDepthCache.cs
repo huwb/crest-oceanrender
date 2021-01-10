@@ -211,25 +211,10 @@ namespace Crest
                 _camDepthCache.gameObject.SetActive(false);
             }
 
-            // Make sure this global is set - I found this was necessary to set it here. However this can cause glitchiness in editor
-            // as it messes with this global vector, so only do it if not in edit mode
-#if UNITY_EDITOR
-            if (EditorApplication.isPlaying)
-#endif
-            {
-                // Shader needs sea level to determine water depth
-                var centerPoint = Vector3.zero;
-                if (OceanRenderer.Instance != null)
-                {
-                    centerPoint.y = OceanRenderer.Instance.Root.position.y;
-                }
-                else
-                {
-                    centerPoint.y = transform.position.y;
-                }
-
-                Shader.SetGlobalVector("_OceanCenterPosWorld", centerPoint);
-            }
+            // Set average water height from this cache position, relative to which water depth is computed. This assumes that
+            // this cache is correctly placed. I don't think there is a good way to know at validation time, so this is a pitfall
+            // at the moment.
+            Shader.SetGlobalFloat("_SeaLevel", transform.position.y);
 
             _camDepthCache.RenderWithShader(Shader.Find("Crest/Inputs/Depth/Ocean Depth From Geometry"), null);
 
@@ -480,12 +465,12 @@ namespace Crest
                 isValid = false;
             }
 
-            if (ocean != null && ocean.Root != null && Mathf.Abs(transform.position.y - ocean.Root.position.y) > 0.00001f)
+            if (ocean != null && ocean.Root != null && transform.position.y < ocean.Root.position.y)
             {
                 showMessage
                 (
-                    "It is recommended that the cache is placed at the same height (y component of position) as the ocean, i.e. at the sea level. If the cache is created before the ocean is present, the cache height will inform the sea level.",
-                    ValidatedHelper.MessageType.Warning, this
+                    "Validation: The depth cache must be placed at the sea level or higher.",
+                    ValidatedHelper.MessageType.Error, this
                 );
 
                 isValid = false;

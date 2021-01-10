@@ -18,13 +18,14 @@ Shader "Crest/Inputs/Depth/Cached Depths"
 			// To confuse matters further, ocean depth is now more like 'sea floor altitude' - a height above a deep water value,
 			// so values are increasing in Y and we need to take the MAX of all depths.
 			BlendOp Min
-			ColorMask R
+			ColorMask RG
 
 			CGPROGRAM
 			#pragma vertex Vert
 			#pragma fragment Frag
 		
 			#include "UnityCG.cginc"
+			#include "../../OceanGlobals.hlsl"
 
 			sampler2D _MainTex;
 
@@ -41,20 +42,25 @@ Shader "Crest/Inputs/Depth/Cached Depths"
 			struct Varyings
 			{
 				float4 position : SV_POSITION;
-				float2 uv : TEXCOORD0;
+				float3 uv_worldY : TEXCOORD0;
 			};
 
 			Varyings Vert(Attributes input)
 			{
 				Varyings output;
 				output.position = UnityObjectToClipPos(input.positionOS);
-				output.uv = TRANSFORM_TEX(input.uv, _MainTex);
+				output.uv_worldY.xy = TRANSFORM_TEX(input.uv, _MainTex);
+				output.uv_worldY.z = mul(unity_ObjectToWorld, float4(input.positionOS, 1.0)).y;
 				return output;
 			}
 
-			half4 Frag(Varyings input) : SV_Target
+			float2 Frag(Varyings input) : SV_Target
 			{
-				return half4(tex2D(_MainTex, input.uv).x, 0.0, 0.0, 0.0);
+				float cachedDepth = tex2D(_MainTex, input.uv_worldY.xy).x;
+				float seaLevelOffset = input.uv_worldY.z - _OceanCenterPosWorld.y;
+				// Hack: Write -seaLevelOffset, as BlendOp is set to Min above. This assumes then that
+				// offsets are only ever above sea level, not below.
+				return float2(cachedDepth, -seaLevelOffset);
 			}
 			ENDCG
 		}

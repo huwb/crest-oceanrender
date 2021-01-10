@@ -128,14 +128,21 @@ Shader "Crest/Underwater Curtain"
 					// too much up or down, the intersection between the near plane and the water surface can be complex.
 					if (abs(forward.y) < CREST_MAX_UPDOWN_AMOUNT)
 					{
+						float seaLevel = _OceanCenterPosWorld.y;
+						{
+							float3 uv_slice = WorldToUV(_WorldSpaceCameraPos.xz, _CrestCascadeData[_LD_SliceIndex], 0.0);
+							float waterDepth = 0.0;
+							SampleSeaDepth(_LD_TexArray_SeaFloorDepth, uv_slice, 1.0, waterDepth, seaLevel);
+						}
+
 						// move vert in the up direction, but only to an extent, otherwise numerical issues can cause weirdness
-						o.positionWS += min(IntersectRayWithWaterSurface(o.positionWS, up, _CrestCascadeData[_LD_SliceIndex]), MAX_OFFSET) * up;
+						o.positionWS += min(IntersectRayWithWaterSurface(seaLevel, o.positionWS, up, _CrestCascadeData[_LD_SliceIndex]), MAX_OFFSET) * up;
 
 						// Move the geometry towards the horizon. As noted above, the skirt will be stomped by the ocean
 						// surface render. If we project a bit towards the horizon to make a bit of overlap then we can reduce
 						// the chance render issues from cracks/gaps with down angles, or of the skirt being too high for up angles.
 						float3 horizonPoint = _WorldSpaceCameraPos + (posOnNearPlane - _WorldSpaceCameraPos) * 10000.0;
-						horizonPoint.y = _OceanCenterPosWorld.y;
+						horizonPoint.y = seaLevel;
 						const float3 horizonDir = normalize(horizonPoint - _WorldSpaceCameraPos);
 						const float3 projectionOfHorizonOnNearPlane = _WorldSpaceCameraPos + horizonDir / dot(horizonDir, forward);
 						o.positionWS = lerp(o.positionWS, projectionOfHorizonOnNearPlane, 0.1);

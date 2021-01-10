@@ -75,6 +75,14 @@ void SampleSeaDepth(in Texture2DArray i_oceanDepthSampler, in float3 i_uv_slice,
 	io_oceanDepth += i_wt * (i_oceanDepthSampler.SampleLevel(LODData_linear_clamp_sampler, i_uv_slice, 0.0).x - CREST_OCEAN_DEPTH_BASELINE);
 }
 
+void SampleSeaDepth(in Texture2DArray i_oceanDepthSampler, in float3 i_uv_slice, in float i_wt, inout half io_oceanDepth, inout float io_seaLevelOffset )
+{
+	float2 data = i_oceanDepthSampler.SampleLevel( LODData_linear_clamp_sampler, i_uv_slice, 0.0 );
+	io_oceanDepth += i_wt * (data.x - CREST_OCEAN_DEPTH_BASELINE);
+	// Quirk - offsets stored as negative values, to help with blending in OceanDepthsCache.shader, see comment there
+	io_seaLevelOffset += i_wt * -data.y;
+}
+
 void SampleShadow(in Texture2DArray i_oceanShadowSampler, in float3 i_uv_slice, in float i_wt, inout half2 io_shadow)
 {
 	io_shadow += i_wt * i_oceanShadowSampler.SampleLevel(LODData_linear_clamp_sampler, i_uv_slice, 0.0).xy;
