@@ -130,8 +130,8 @@ Shader "Crest/Ocean"
 		[Header(Transparency)]
 		// Whether light can pass through the water surface
 		[Toggle] _Transparency("Enable", Float) = 1
-		// Scattering coefficient within water volume, per channel
-		_DepthFogDensity("Fog Density", Vector) = (0.33, 0.23, 0.37, 1.0)
+		// The colour of the fog at 5m from the viewer. Alpha value scales fog density.
+		_FogColour("Fog Colour", Color) = (0.0, 0.0, 0.0, 0.5)
 		// How strongly light is refracted when passing through water surface
 		_RefractionStrength("Refraction Strength", Range(0.0, 2.0)) = 0.1
 

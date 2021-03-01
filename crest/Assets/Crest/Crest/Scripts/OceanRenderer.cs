@@ -722,6 +722,16 @@ namespace Crest
             Shader.SetGlobalFloat(sp_lodAlphaBlackPointFade, _lodAlphaBlackPointFade);
             Shader.SetGlobalFloat(sp_lodAlphaBlackPointWhitePointFade, _lodAlphaBlackPointWhitePointFade);
 
+            // If a fog colour is non-black (black is default) then set fog density from colour
+            {
+                var fogColour = _material.GetColor("_FogColour");
+                Vector3 alpha = Vector3.zero;
+                alpha.x = Mathf.Log(fogColour.r + 0.0001f);
+                alpha.y = Mathf.Log(fogColour.g + 0.0001f);
+                alpha.z = Mathf.Log(fogColour.b + 0.0001f);
+                _material.SetVector("_DepthFogDensity", -fogColour.a * 32f * alpha / 5f);
+            }
+
             // LOD 0 is blended in/out when scale changes, to eliminate pops. Here we set it as a global, whereas in OceanChunkRenderer it
             // is applied to LOD0 tiles only through instance data. This global can be used in compute, where we only apply this factor for slice 0.
             var needToBlendOutShape = ScaleCouldIncrease;
