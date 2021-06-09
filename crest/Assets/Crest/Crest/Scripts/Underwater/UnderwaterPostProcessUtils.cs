@@ -13,19 +13,22 @@ namespace Crest
     {
         public static readonly int sp_CrestOceanMaskTexture = Shader.PropertyToID("_CrestOceanMaskTexture");
         public static readonly int sp_CrestOceanMaskDepthTexture = Shader.PropertyToID("_CrestOceanMaskDepthTexture");
+        public static readonly int sp_CrestOceanOccluderMaskTexture = Shader.PropertyToID("_CrestOceanOccluderMaskTexture");
+        public static readonly int sp_CrestOceanOccluderMaskDepthTexture = Shader.PropertyToID("_CrestOceanOccluderMaskDepthTexture");
+        public static readonly int sp_CrestInvViewProjection = Shader.PropertyToID("_CrestInvViewProjection");
+        public static readonly int sp_CrestInvViewProjectionRight = Shader.PropertyToID("_CrestInvViewProjectionRight");
 
         static readonly int sp_OceanHeight = Shader.PropertyToID("_OceanHeight");
-        static readonly int sp_InvViewProjection = Shader.PropertyToID("_InvViewProjection");
-        static readonly int sp_InvViewProjectionRight = Shader.PropertyToID("_InvViewProjectionRight");
         static readonly int sp_InstanceData = Shader.PropertyToID("_InstanceData");
-        static readonly int sp_AmbientLighting = Shader.PropertyToID("_AmbientLighting");
-        static readonly int sp_HorizonPosNormal = Shader.PropertyToID("_HorizonPosNormal");
-        static readonly int sp_HorizonPosNormalRight = Shader.PropertyToID("_HorizonPosNormalRight");
+        static readonly int sp_CrestAmbientLighting = Shader.PropertyToID("_CrestAmbientLighting");
+        static readonly int sp_CrestHorizonPosNormal = Shader.PropertyToID("_CrestHorizonPosNormal");
+        static readonly int sp_CrestHorizonPosNormalRight = Shader.PropertyToID("_CrestHorizonPosNormalRight");
         static readonly int sp_DataSliceOffset = Shader.PropertyToID("_DataSliceOffset");
 
         internal const string tooltipHorizonSafetyMarginMultiplier = "A safety margin multiplier to adjust horizon line based on camera position to avoid minor artifacts caused by floating point precision issues, the default value has been chosen based on careful experimentation.";
         internal const string tooltipFilterOceanData = "How much to smooth ocean data such as water depth, light scattering, shadowing. Helps to smooth flickering that can occur under camera motion.";
         internal const string tooltipMeniscus = "Add a meniscus to the boundary between water and air.";
+        internal const string toolipCopyOceanParamsEachFrame = "If true, underwater effect copies ocean material params each frame. Setting to false will make it cheaper but risks the underwater appearance looking wrong if the ocean material is changed.";
 
         // A magic number found after a small-amount of iteration that is used to deal with horizon-line floating-point
         // issues. It allows us to give it a small *nudge* in the right direction based on whether the camera is above
@@ -47,7 +50,7 @@ namespace Crest
         internal const string FULL_SCREEN_EFFECT = "_FULL_SCREEN_EFFECT";
         internal const string DEBUG_VIEW_OCEAN_MASK = "_DEBUG_VIEW_OCEAN_MASK";
 
-        internal static void InitialiseMaskTextures(RenderTextureDescriptor desc, ref RenderTexture textureMask, ref RenderTexture depthBuffer)
+        internal static void InitialiseMaskTextures(RenderTextureDescriptor desc, bool isOcean, ref RenderTexture textureMask, ref RenderTexture depthBuffer)
         {
             // Note: we pass-through pixel dimensions explicitly as we have to handle this slightly differently in HDRP
             if (textureMask == null || textureMask.width != desc.width || textureMask.height != desc.height)
@@ -62,7 +65,8 @@ namespace Crest
 
                 textureMask = new RenderTexture(desc);
                 textureMask.depth = 0;
-                textureMask.name = "Ocean Mask";
+                textureMask.name = isOcean ? "Ocean Mask" : "Ocean Occluder Mask";
+
                 // @Memory: We could investigate making this an 8-bit texture instead to reduce GPU memory usage.
                 // We could also potentially try a half res mask as the mensicus could mask res issues.
                 textureMask.format = RenderTextureFormat.RHalf;
@@ -71,7 +75,7 @@ namespace Crest
                 depthBuffer = new RenderTexture(desc);
                 depthBuffer.depth = 24;
                 depthBuffer.enableRandomWrite = false;
-                depthBuffer.name = "Ocean Mask Depth";
+                depthBuffer.name = isOcean ? "Ocean Depth Buffer" : "Ocean Occluder Depth Buffer";
                 depthBuffer.format = RenderTextureFormat.Depth;
                 depthBuffer.Create();
             }
@@ -80,15 +84,34 @@ namespace Crest
         // Populates a screen space mask which will inform the underwater postprocess. As a future optimisation we may
         // be able to avoid this pass completely if we can reuse the camera depth after transparents are rendered.
         internal static void PopulateOceanMask(
-            CommandBuffer commandBuffer, Camera camera, List<OceanChunkRenderer> chunksToRender, Plane[] frustumPlanes,
-            RenderTexture colorBuffer, RenderTexture depthBuffer,
-            Material oceanMaskMaterial,
+            CommandBuffer commandBuffer, Camera camera,
+            List<OceanChunkRenderer> chunksToRender,
+            List<OceanOccluder> underwaterEffectFilters,
+            Plane[] frustumPlanes,
+            RenderTexture oceanMask, RenderTexture oceanDepthBuffer, Material oceanMaskMaterial,
+            RenderTexture oceanOccluderMask, RenderTexture oceanOccluderDepthBuffer, Material oceanOccluderMaskMaterial,
+            UnderwaterSphericalHarmonicsData sphericalHarmonicsData,
+            float horizonSafetyMarginMultiplier,
             bool debugDisableOceanMask
         )
         {
+
+            commandBuffer.SetRenderTarget(oceanOccluderMask.colorBuffer, oceanOccluderDepthBuffer.depthBuffer);
+            commandBuffer.ClearRenderTarget(true, true, Color.white * UNDERWATER_MASK_NO_MASK);
+            commandBuffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
+
+            foreach (OceanOccluder underwaterEffectFilter in underwaterEffectFilters)
+            {
+                commandBuffer.SetGlobalFloat(OceanOccluder.sp_OceanOccluderType, (float)underwaterEffectFilter.OccluderType);
+                commandBuffer.DrawRenderer(underwaterEffectFilter.Renderer, oceanOccluderMaskMaterial);
+            }
+
+            commandBuffer.SetGlobalTexture(sp_CrestOceanOccluderMaskTexture, oceanOccluderMask);
+            commandBuffer.SetGlobalTexture(sp_CrestOceanOccluderMaskDepthTexture, oceanOccluderDepthBuffer);
+
             // Get all ocean chunks and render them using cmd buffer, but with mask shader.
             // Passing -1 to depth slice binds all slices. Important for XR SPI to work in both eyes.
-            commandBuffer.SetRenderTarget(colorBuffer.colorBuffer, depthBuffer.depthBuffer, mipLevel: 0, CubemapFace.Unknown, depthSlice: -1);
+            commandBuffer.SetRenderTarget(oceanMask.colorBuffer, oceanDepthBuffer.depthBuffer, mipLevel: 0, CubemapFace.Unknown, depthSlice: -1);
             commandBuffer.ClearRenderTarget(true, true, Color.white * UNDERWATER_MASK_NO_MASK);
             commandBuffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
 
@@ -111,9 +134,72 @@ namespace Crest
                 }
             }
 
-            commandBuffer.SetGlobalTexture(sp_CrestOceanMaskTexture, colorBuffer);
-            commandBuffer.SetGlobalTexture(sp_CrestOceanMaskDepthTexture, depthBuffer);
+            commandBuffer.SetGlobalTexture(sp_CrestOceanMaskTexture, oceanMask);
+            commandBuffer.SetGlobalTexture(sp_CrestOceanMaskDepthTexture, oceanDepthBuffer);
 
+            float oceanHeight = OceanRenderer.Instance.SeaLevel;
+
+            // Have to set these explicitly as the built-in transforms aren't in world-space for the blit function
+            if (XRHelpers.IsSinglePass)
+            {
+                XRHelpers.SetViewProjectionMatrices(camera);
+
+                // Store projection matrix to restore later.
+                var projectionMatrix = camera.projectionMatrix;
+
+                // We need to set the matrix ourselves. Maybe ViewportToWorldPoint has a bug.
+                camera.projectionMatrix = XRHelpers.LeftEyeProjectionMatrix;
+
+                var inverseViewProjectionMatrix = (XRHelpers.LeftEyeProjectionMatrix * XRHelpers.LeftEyeViewMatrix).inverse;
+                commandBuffer.SetGlobalMatrix(sp_CrestInvViewProjection, inverseViewProjectionMatrix);
+
+                {
+                    GetHorizonPosNormal(camera, Camera.MonoOrStereoscopicEye.Left, oceanHeight, horizonSafetyMarginMultiplier, out Vector2 pos, out Vector2 normal);
+                    commandBuffer.SetGlobalVector(sp_CrestHorizonPosNormal, new Vector4(pos.x, pos.y, normal.x, normal.y));
+                }
+
+                // We need to set the matrix ourselves. Maybe ViewportToWorldPoint has a bug.
+                camera.projectionMatrix = XRHelpers.RightEyeProjectionMatrix;
+
+                var inverseViewProjectionMatrixRightEye = (XRHelpers.RightEyeProjectionMatrix * XRHelpers.RightEyeViewMatrix).inverse;
+                commandBuffer.SetGlobalMatrix(sp_CrestInvViewProjectionRight, inverseViewProjectionMatrixRightEye);
+
+                {
+                    GetHorizonPosNormal(camera, Camera.MonoOrStereoscopicEye.Right, oceanHeight, horizonSafetyMarginMultiplier, out Vector2 pos, out Vector2 normal);
+                    commandBuffer.SetGlobalVector(sp_CrestHorizonPosNormalRight, new Vector4(pos.x, pos.y, normal.x, normal.y));
+                }
+
+                // Restore projection matrix.
+                camera.projectionMatrix = projectionMatrix;
+            }
+            else
+            {
+                XRHelpers.SetViewProjectionMatrices(camera);
+
+                var inverseViewProjectionMatrix = (camera.projectionMatrix * camera.worldToCameraMatrix).inverse;
+                commandBuffer.SetGlobalMatrix(sp_CrestInvViewProjection, inverseViewProjectionMatrix);
+
+                {
+                    GetHorizonPosNormal(camera, Camera.MonoOrStereoscopicEye.Mono, oceanHeight, horizonSafetyMarginMultiplier, out Vector2 pos, out Vector2 normal);
+                    commandBuffer.SetGlobalVector(sp_CrestHorizonPosNormal, new Vector4(pos.x, pos.y, normal.x, normal.y));
+                }
+            }
+
+            // Compute ambient lighting SH
+            {
+                // We could pass in a renderer which would prime this lookup. However it doesnt make sense to use an existing render
+                // at different position, as this would then thrash it and negate the priming functionality. We could create a dummy invis GO
+                // with a dummy Renderer which might be enoguh, but this is hacky enough that we'll wait for it to become a problem
+                // rather than add a pre-emptive hack.
+
+                UnityEngine.Profiling.Profiler.BeginSample("Underwater sample spherical harmonics");
+
+                LightProbes.GetInterpolatedProbe(OceanRenderer.Instance.ViewCamera.transform.position, null, out SphericalHarmonicsL2 sphericalHarmonicsL2);
+                sphericalHarmonicsL2.Evaluate(sphericalHarmonicsData._shDirections, sphericalHarmonicsData._ambientLighting);
+                commandBuffer.SetGlobalVector(sp_CrestAmbientLighting, sphericalHarmonicsData._ambientLighting[0]);
+
+                UnityEngine.Profiling.Profiler.EndSample();
+            }
         }
 
         internal static void UpdatePostProcessMaterial(
@@ -202,7 +288,13 @@ namespace Crest
                 }
                 // We don't both setting the horizon value if we know we are going to be having to apply the post-processing
                 // effect full-screen anyway.
-                bool forceFullShader = (cameraYPosition + nearPlaneFrustumWorldHeight + maxOceanVerticalDisplacement) <= seaLevel;
+
+                // TODO(TRC):Now figure-out how to handle this (we probably want to avoid rendering the mask in this
+                // case as well) - being able to be inside surfaces with underwater disabled means that this can't be
+                // turned on/off as gung-ho as we would like.
+                // - I think the right solution here is to make underwater windows a feature that if enabled, will only
+                // enable the code in the given case.
+                bool forceFullShader = false; // (cameraYPosition + nearPlaneFrustumWorldHeight + maxOceanVerticalDisplacement) <= seaLevel;
                 underwaterPostProcessMaterial.SetFloat(sp_OceanHeight, seaLevel);
                 if (forceFullShader)
                 {
@@ -212,69 +304,6 @@ namespace Crest
                 {
                     underwaterPostProcessMaterial.DisableKeyword(FULL_SCREEN_EFFECT);
                 }
-
-            }
-
-            // Have to set these explicitly as the built-in transforms aren't in world-space for the blit function
-            if (XRHelpers.IsSinglePass)
-            {
-                XRHelpers.SetViewProjectionMatrices(camera);
-
-                // Store projection matrix to restore later.
-                var projectionMatrix = camera.projectionMatrix;
-
-                // We need to set the matrix ourselves. Maybe ViewportToWorldPoint has a bug.
-                camera.projectionMatrix = XRHelpers.LeftEyeProjectionMatrix;
-
-                var inverseViewProjectionMatrix = (XRHelpers.LeftEyeProjectionMatrix * XRHelpers.LeftEyeViewMatrix).inverse;
-                underwaterPostProcessMaterial.SetMatrix(sp_InvViewProjection, inverseViewProjectionMatrix);
-
-                {
-                    GetHorizonPosNormal(camera, Camera.MonoOrStereoscopicEye.Left, seaLevel, horizonSafetyMarginMultiplier, out Vector2 pos, out Vector2 normal);
-                    underwaterPostProcessMaterial.SetVector(sp_HorizonPosNormal, new Vector4(pos.x, pos.y, normal.x, normal.y));
-                }
-
-                // We need to set the matrix ourselves. Maybe ViewportToWorldPoint has a bug.
-                camera.projectionMatrix = XRHelpers.RightEyeProjectionMatrix;
-
-                var inverseViewProjectionMatrixRightEye = (XRHelpers.RightEyeProjectionMatrix * XRHelpers.RightEyeViewMatrix).inverse;
-                underwaterPostProcessMaterial.SetMatrix(sp_InvViewProjectionRight, inverseViewProjectionMatrixRightEye);
-
-                {
-                    GetHorizonPosNormal(camera, Camera.MonoOrStereoscopicEye.Right, seaLevel, horizonSafetyMarginMultiplier, out Vector2 pos, out Vector2 normal);
-                    underwaterPostProcessMaterial.SetVector(sp_HorizonPosNormalRight, new Vector4(pos.x, pos.y, normal.x, normal.y));
-                }
-
-                // Restore projection matrix.
-                camera.projectionMatrix = projectionMatrix;
-            }
-            else
-            {
-                XRHelpers.SetViewProjectionMatrices(camera);
-
-                var inverseViewProjectionMatrix = (camera.projectionMatrix * camera.worldToCameraMatrix).inverse;
-                underwaterPostProcessMaterial.SetMatrix(sp_InvViewProjection, inverseViewProjectionMatrix);
-
-                {
-                    GetHorizonPosNormal(camera, Camera.MonoOrStereoscopicEye.Mono, seaLevel, horizonSafetyMarginMultiplier, out Vector2 pos, out Vector2 normal);
-                    underwaterPostProcessMaterial.SetVector(sp_HorizonPosNormal, new Vector4(pos.x, pos.y, normal.x, normal.y));
-                }
-            }
-
-            // Compute ambient lighting SH
-            {
-                // We could pass in a renderer which would prime this lookup. However it doesnt make sense to use an existing render
-                // at different position, as this would then thrash it and negate the priming functionality. We could create a dummy invis GO
-                // with a dummy Renderer which might be enoguh, but this is hacky enough that we'll wait for it to become a problem
-                // rather than add a pre-emptive hack.
-
-                UnityEngine.Profiling.Profiler.BeginSample("Underwater sample spherical harmonics");
-
-                LightProbes.GetInterpolatedProbe(OceanRenderer.Instance.ViewCamera.transform.position, null, out SphericalHarmonicsL2 sphericalHarmonicsL2);
-                sphericalHarmonicsL2.Evaluate(sphericalHarmonicsData._shDirections, sphericalHarmonicsData._ambientLighting);
-                underwaterPostProcessMaterial.SetVector(sp_AmbientLighting, sphericalHarmonicsData._ambientLighting[0]);
-
-                UnityEngine.Profiling.Profiler.EndSample();
             }
         }
 

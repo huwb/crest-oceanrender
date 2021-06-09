@@ -19,9 +19,9 @@ namespace Crest
     /// specific features such as enabling the meniscus.
     /// </summary>
     [RequireComponent(typeof(Camera))]
-    public class UnderwaterPostProcess : MonoBehaviour
+    public class UnderwaterPostProcess : MonoBehaviour, IUnderwaterPostProcessPerCameraData
     {
-        [Header("Settings"), SerializeField, Tooltip("If true, underwater effect copies ocean material params each frame. Setting to false will make it cheaper but risks the underwater appearance looking wrong if the ocean material is changed.")]
+        [Header("Settings"), SerializeField, Tooltip(toolipCopyOceanParamsEachFrame)]
         bool _copyOceanMaterialParamsEachFrame = true;
 
         [SerializeField, Tooltip("Assign this to a material that uses shader `Crest/Underwater/Post Process`, with the same features enabled as the ocean surface material(s).")]
@@ -36,23 +36,30 @@ namespace Crest
         [Header("Debug Options")]
         [SerializeField] bool _viewPostProcessMask = false;
         [SerializeField] bool _disableOceanMask = false;
-        [SerializeField, Tooltip(UnderwaterPostProcessUtils.tooltipHorizonSafetyMarginMultiplier), Range(0f, 1f)]
+        [SerializeField, Tooltip(tooltipHorizonSafetyMarginMultiplier), Range(0f, 1f)]
         float _horizonSafetyMarginMultiplier = UnderwaterPostProcessUtils.DefaultHorizonSafetyMarginMultiplier;
         // end public debug options
 
         private Camera _mainCamera;
-        private RenderTexture _textureMask;
-        private RenderTexture _depthBuffer;
+        private RenderTexture _oceanMask;
+        private RenderTexture _oceanDepthBuffer;
+        private RenderTexture _oceanOccluderMask;
+        private RenderTexture _oceanOccluderDepthBuffer;
         private CommandBuffer _maskCommandBuffer;
         private CommandBuffer _postProcessCommandBuffer;
 
         private Plane[] _cameraFrustumPlanes;
 
         private Material _oceanMaskMaterial = null;
+        private Material _oceanOccluderMaskMaterial = null;
 
         private PropertyWrapperMaterial _underwaterPostProcessMaterialWrapper;
 
+        private List<OceanOccluder> _oceanOccluderMasksToRender;
+        public List<OceanOccluder> OceanOccluderMasksToRender => _oceanOccluderMasksToRender;
+
         private const string SHADER_OCEAN_MASK = "Crest/Underwater/Ocean Mask";
+        private const string OCEAN_OCCLUDER_MASK = "Crest/Underwater/Ocean Occluder Mask";
 
         UnderwaterSphericalHarmonicsData _sphericalHarmonicsData = new UnderwaterSphericalHarmonicsData();
 
@@ -63,6 +70,11 @@ namespace Crest
 
         // Only one camera is supported.
         public static UnderwaterPostProcess Instance { get; private set; }
+
+        public void RegisterOceanOccluder(OceanOccluder _oceanOccluder)
+        {
+            _oceanOccluderMasksToRender.Add(_oceanOccluder);
+        }
 
         private bool InitialisedCorrectly()
         {
@@ -79,12 +91,24 @@ namespace Crest
                 return false;
             }
 
-            var maskShader = Shader.Find(SHADER_OCEAN_MASK);
-            _oceanMaskMaterial = maskShader ? new Material(maskShader) : null;
-            if (_oceanMaskMaterial == null)
             {
-                Debug.LogError($"Could not create a material with shader {SHADER_OCEAN_MASK}", this);
-                return false;
+                var maskShader = Shader.Find(SHADER_OCEAN_MASK);
+                _oceanMaskMaterial = maskShader ? new Material(maskShader) : null;
+                if (_oceanMaskMaterial == null)
+                {
+                    Debug.LogError($"Could not create a material with shader {SHADER_OCEAN_MASK}", this);
+                    return false;
+                }
+            }
+
+            {
+                var oceanOccluderShader = Shader.Find(OCEAN_OCCLUDER_MASK);
+                _oceanOccluderMaskMaterial = oceanOccluderShader ? new Material(oceanOccluderShader) : null;
+                if (_oceanOccluderMaskMaterial == null)
+                {
+                    Debug.LogError($"Could not create a material with shader {OCEAN_OCCLUDER_MASK}", this);
+                    return false;
+                }
             }
 
             // TODO: Use run-time materials only.
@@ -130,6 +154,8 @@ namespace Crest
             // Stop the material from being saved on-edits at runtime
             _underwaterPostProcessMaterial = new Material(_underwaterPostProcessMaterial);
             _underwaterPostProcessMaterialWrapper = new PropertyWrapperMaterial(_underwaterPostProcessMaterial);
+
+            _oceanOccluderMasksToRender = new List<OceanOccluder>();
         }
 
         private void OnDestroy()
@@ -157,7 +183,15 @@ namespace Crest
 
         private void ViewerMoreThan2mAboveWater(OceanRenderer ocean)
         {
-            enabled = false;
+            // TODO(TRC):Now This "optimisation" doesn't work if you have underwater windows, because the ocean mask
+            // needs to be rendered for them to work no matter the heigh of the camera- > it gives the ocean holes.
+
+            // I think it might be worth re-considering remove the event system for this stuff and implementing this as
+            // separate enabler script that spins-up to enable/disabel to the post-process effect. (maybe?)
+            //
+            // That way we can actively check if there are any UnderwaterEffectFilters, and then only enable this if
+            // there aren't any? :DeOptimiseForFilters
+            // enabled = false;
         }
 
         private void ViewerLessThan2mAboveWater(OceanRenderer ocean)
@@ -189,15 +223,23 @@ namespace Crest
             RenderTextureDescriptor descriptor = XRHelpers.IsRunning
                     ? XRHelpers.EyeRenderTextureDescriptor
                     : new RenderTextureDescriptor(_mainCamera.pixelWidth, _mainCamera.pixelHeight);
-
-            InitialiseMaskTextures(descriptor, ref _textureMask, ref _depthBuffer);
+            InitialiseMaskTextures(descriptor, true, ref _oceanMask, ref _oceanDepthBuffer);
+            // TODO(TRC):Now only initialise these if there are any transparent ocean occluders
+            InitialiseMaskTextures(descriptor, false, ref _oceanOccluderMask, ref _oceanOccluderDepthBuffer);
 
             PopulateOceanMask(
-                _maskCommandBuffer, _mainCamera, OceanRenderer.Instance.Tiles, _cameraFrustumPlanes,
-                _textureMask, _depthBuffer,
-                _oceanMaskMaterial,
+                _maskCommandBuffer, _mainCamera,
+                OceanRenderer.Instance.Tiles,
+                _oceanOccluderMasksToRender,
+                _cameraFrustumPlanes,
+                _oceanMask, _oceanDepthBuffer, _oceanMaskMaterial,
+                _oceanOccluderMask, _oceanOccluderDepthBuffer, _oceanOccluderMaskMaterial,
+                _sphericalHarmonicsData,
+                _horizonSafetyMarginMultiplier,
                 _disableOceanMask
             );
+
+            _oceanOccluderMasksToRender.Clear();
 
             if (OceanRenderer.Instance == null)
             {
@@ -209,7 +251,8 @@ namespace Crest
             {
                 OceanRenderer.Instance.ViewerLessThan2mAboveWater += ViewerLessThan2mAboveWater;
                 OceanRenderer.Instance.ViewerMoreThan2mAboveWater += ViewerMoreThan2mAboveWater;
-                enabled = OceanRenderer.Instance.ViewerHeightAboveWater < 2f;
+                // TODO(TRC):Now See :DeOptimiseForFilters
+                // enabled = OceanRenderer.Instance.ViewerHeightAboveWater < 2f;
                 _eventsRegistered = true;
             }
 

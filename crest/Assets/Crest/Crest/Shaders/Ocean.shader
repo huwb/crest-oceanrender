@@ -272,6 +272,7 @@ Shader "Crest/Ocean"
 			#include "OceanVertHelpers.hlsl"
 			#include "OceanShaderHelpers.hlsl"
 			#include "OceanLightingHelpers.hlsl"
+			#include "OceanOccluderHelpers.hlsl"
 
 			#include "OceanEmission.hlsl"
 			#include "OceanNormalMapping.hlsl"
@@ -493,6 +494,9 @@ Shader "Crest/Ocean"
 				float pixelZ = CrestLinearEyeDepth(input.positionCS.z);
 				half3 screenPos = input.foam_screenPosXYW.yzw;
 				half2 uvDepth = screenPos.xy / screenPos.z;
+				{
+					DiscardOceanSurfaceFromOccluderMask(uvDepth, input.positionCS.z);
+				}
 				// Raw depth is logarithmic for perspective, and linear (0-1) for orthographic.
 				float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uvDepth).x;
 				float sceneZ = CrestLinearEyeDepth(rawDepth);

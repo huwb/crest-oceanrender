@@ -31,6 +31,7 @@ Shader "Crest/Underwater/Ocean Mask"
 			struct Varyings
 			{
 				float4 positionCS : SV_POSITION;
+				float4 screenPos : TEXCOORD1;
 
 				UNITY_VERTEX_OUTPUT_STEREO
 			};
@@ -40,6 +41,7 @@ Shader "Crest/Underwater/Ocean Mask"
 			#include "../OceanGlobals.hlsl"
 			#include "../OceanHelpersNew.hlsl"
 			#include "../OceanVertHelpers.hlsl"
+			#include "../OceanOccluderHelpers.hlsl"
 
 			// Hack - due to SV_IsFrontFace occasionally coming through as true for backfaces,
 			// add a param here that forces ocean to be in undrwater state. I think the root
@@ -94,12 +96,17 @@ Shader "Crest/Underwater/Ocean Mask"
 				}
 
 				output.positionCS = mul(UNITY_MATRIX_VP, float4(worldPos, 1.0));
+				output.screenPos =  ComputeScreenPos(output.positionCS);
 
 				return output;
 			}
 
 			half4 Frag(const Varyings input, const bool i_isFrontFace : SV_IsFrontFace) : SV_Target
 			{
+				half3 uv_z = input.screenPos.xyz/input.screenPos.w;
+
+				DiscardOceanMaskFromOccluderMask(uv_z.xy, uv_z.z);
+
 				if (IsUnderwater(i_isFrontFace, _ForceUnderwater))
 				{
 					return (half4)UNDERWATER_MASK_WATER_SURFACE_BELOW;
