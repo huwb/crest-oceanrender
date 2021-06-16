@@ -32,6 +32,8 @@ namespace Crest
         [SerializeField, Tooltip(tooltipMeniscus)]
         bool _meniscus = true;
 
+        public Transform clippingPlane;
+
         [Header("Debug Options")]
         [SerializeField] bool _viewPostProcessMask = false;
         [SerializeField] bool _disableOceanMask = false;
@@ -244,6 +246,13 @@ namespace Crest
                 _xrPassIndex
             );
 
+            if (clippingPlane != null)
+            {
+                _underwaterPostProcessMaterial.SetMatrix("_InverseView", _mainCamera.cameraToWorldMatrix);
+                _underwaterPostProcessMaterial.SetVector("_ClippingPlaneNormal", clippingPlane.transform.up);
+                _underwaterPostProcessMaterial.SetVector("_ClippingPlanePosition", clippingPlane.transform.position);
+            }
+
             _postProcessCommandBuffer.Clear();
 
             if (_mainCamera.allowMSAA)
@@ -266,6 +275,21 @@ namespace Crest
             RenderTexture.ReleaseTemporary(temporaryColorBuffer);
 
             _firstRender = false;
+        }
+
+        void OnDrawGizmos()
+        {
+            if (clippingPlane != null)
+            {
+                var rotation = Quaternion.LookRotation(clippingPlane.transform.up);
+                Gizmos.matrix = Matrix4x4.TRS(clippingPlane.transform.position, rotation, Vector3.one);
+                var color = Color.green;
+                color.a = 0.5f;
+                Gizmos.color = color;
+                Gizmos.DrawCube(Vector3.zero, new Vector3(1000, 1000, 0));
+                Gizmos.matrix = Matrix4x4.identity;
+                Gizmos.color = Color.white;
+            }
         }
     }
 
