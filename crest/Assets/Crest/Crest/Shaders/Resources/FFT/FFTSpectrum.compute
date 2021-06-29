@@ -61,6 +61,18 @@ float RandGauss()
 void DeepDispersion(float k, out float w, out float dwdk)
 {
 	w = sqrt(abs(_Gravity * k));
+
+	// lets say the waves should repeat ever 16s.
+	// TODO: drive this from outside to whatever period is needed.
+	const float globalPeriod = 16;
+	float thisPeriod = PI2 / w;
+	float loops = globalPeriod / thisPeriod;
+	// make sure loops integral number of times
+	loops = ceil( loops );
+	// work our way back to frequency
+	thisPeriod = globalPeriod / loops;
+	w = PI2 / thisPeriod;
+
 	dwdk = _Gravity / (2.0f * w);
 }
 

@@ -23,6 +23,8 @@ namespace Crest
         , IReceiveSplinePointOnDrawGizmosSelectedMessages
 #endif
     {
+        public bool _UseThisFFTForHeightQueries = false;
+
         /// <summary>
         /// The version of this asset. Can be used to migrate across versions. This value should
         /// only be changed when the editor upgrades the version.
@@ -46,12 +48,14 @@ namespace Crest
 
         [Tooltip("Primary wave direction heading (deg). This is the angle from x axis in degrees that the waves are oriented towards. If a spline is being used to place the waves, this angle is relative ot the spline."), Range(-180, 180)]
         public float _waveDirectionHeadingAngle = 0f;
+        public float WindDirRadForFFT => _meshForDrawingWaves != null ? 0f : _waveDirectionHeadingAngle * Mathf.Deg2Rad;
         public Vector2 PrimaryWaveDirection => new Vector2(Mathf.Cos(Mathf.PI * _waveDirectionHeadingAngle / 180f), Mathf.Sin(Mathf.PI * _waveDirectionHeadingAngle / 180f));
 
         [Tooltip("When true, uses the wind speed on this component rather than the wind speed from the Ocean Renderer component.")]
         public bool _overrideGlobalWindSpeed = false;
         [Tooltip("Wind speed in km/h. Controls wave conditions."), Range(0, 150f, 2f), Predicated("_overrideGlobalWindSpeed")]
         public float _windSpeed = 20f;
+        public float WindSpeedForFFT => (_overrideGlobalWindSpeed ? _windSpeed : OceanRenderer.Instance._globalWindSpeed) / 3.6f;
 
         [Tooltip("Multiplier for these waves to scale up/down."), Range(0f, 1f)]
         public float _weight = 1f;
@@ -201,8 +205,8 @@ namespace Crest
             _matGenerateWaves.SetVector(sp_AxisX, waveDir);
 
             // If geometry is being used, the ocean input shader will rotate the waves to align to geo
-            var windDirRad = _meshForDrawingWaves != null ? 0f : _waveDirectionHeadingAngle * Mathf.Deg2Rad;
-            var windSpeedMPS = (_overrideGlobalWindSpeed ? _windSpeed : OceanRenderer.Instance._globalWindSpeed) / 3.6f;
+            var windDirRad = WindDirRadForFFT;
+            var windSpeedMPS = WindSpeedForFFT;
 
             // Don't create tons of generators when values are varying. Notify so that existing generators may be adapted.
             if (_windTurbulenceOld != _windTurbulence || _windDirRadOld != windDirRad || _windSpeedOld != windSpeedMPS || _spectrumOld != _spectrum)
@@ -315,6 +319,13 @@ namespace Crest
 #endif
 
             LodDataMgrAnimWaves.RegisterUpdatable(this);
+
+            // TODO this is probably only useful for testing, and actually wants to be kicked off via a button/UI
+            // in the SimSettingsAnimWaves, or from a separate editor window or such
+            if (_UseThisFFTForHeightQueries)
+            {
+                FFTBaker.Bake(this, 256, 32, 16, 16);
+            }
         }
 
         void OnDisable()
@@ -352,9 +363,7 @@ namespace Crest
         {
             if (_debugDrawSlicesInEditor)
             {
-                var windDirRad = _meshForDrawingWaves != null ? 0f : _waveDirectionHeadingAngle * Mathf.Deg2Rad;
-                var windSpeedMPS = (_overrideGlobalWindSpeed ? _windSpeed : OceanRenderer.Instance._globalWindSpeed) / 3.6f;
-                FFTCompute.OnGUI(_resolution, _windTurbulence, windDirRad, windSpeedMPS, _activeSpectrum);
+                FFTCompute.OnGUI(_resolution, _windTurbulence, WindDirRadForFFT, WindSpeedForFFT, _activeSpectrum);
             }
         }
 
