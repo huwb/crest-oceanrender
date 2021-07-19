@@ -55,7 +55,7 @@ namespace Crest
 
         [SerializeField, Tooltip("Use the bounding box of an attached renderer component to determine the max vertical displacement.")]
         [Predicated(typeof(MeshRenderer)), DecoratedField]
-        bool _reportRendererBoundsToOceanSystem = false;
+        bool _reportRendererBoundsToOceanSystem = true;
 
         protected override void Update()
         {
