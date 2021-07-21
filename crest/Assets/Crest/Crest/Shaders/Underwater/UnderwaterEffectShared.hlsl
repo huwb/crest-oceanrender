@@ -103,6 +103,7 @@ void GetOceanSurfaceAndUnderwaterData(
 
 #ifdef CREST_OCEAN_EMISSION_INCLUDED
 half3 ApplyUnderwaterEffect(
+	const half3 ambientLighting,
 	const float3 scenePos,
 	half3 sceneColour,
 	const half3 lightCol,
@@ -128,7 +129,7 @@ half3 ApplyUnderwaterEffect(
 		{
 			const float meshScaleLerp = _CrestPerCascadeInstanceData[sliceIndex]._meshScaleLerp;
 			const float baseCascadeScale = _CrestCascadeData[0]._scale;
-			scatterCol = ScatterColour(_AmbientLighting, depth, _WorldSpaceCameraPos, lightDir, view, shadow, true, true, lightCol, sss, meshScaleLerp, baseCascadeScale, _CrestCascadeData[sliceIndex]);
+			scatterCol = ScatterColour(ambientLighting, depth, _WorldSpaceCameraPos, lightDir, view, shadow, true, true, lightCol, sss, meshScaleLerp, baseCascadeScale, _CrestCascadeData[sliceIndex]);
 		}
 	}
 
