@@ -37,9 +37,7 @@ namespace Crest
         [SerializeField] uint _animatedWavesDisplacementSamplingIterations = 4;
 
         [Header("Signed Distance")]
-        public float _sphereRadius = 0.5f;
-        public Vector3 _boxSize = Vector3.one;
-        public Vector3 _rotation;
+        public Transform _transform; // TODO
 
         public override float Wavelength => 0f;
 
@@ -54,9 +52,7 @@ namespace Crest
         SampleHeightHelper _sampleHeightHelper = new SampleHeightHelper();
 
         static int sp_DisplacementSamplingIterations = Shader.PropertyToID("_DisplacementSamplingIterations");
-        static readonly int sp_SignedDistanceSphere = Shader.PropertyToID("_SignedDistanceSphere");
-        static readonly int sp_SignedDistanceBox = Shader.PropertyToID("_SignedDistanceBox");
-        static readonly int sp_SignedDistanceRotation = Shader.PropertyToID("_SignedDistanceRotation");
+        static readonly int sp_SignedDistanceShapeMatrix = Shader.PropertyToID("_SignedDistanceShapeMatrix");
 
         private void LateUpdate()
         {
@@ -98,17 +94,9 @@ namespace Crest
                 _mpb.SetInt(LodDataMgr.sp_LD_SliceIndex, lodIdx);
                 _mpb.SetInt(sp_DisplacementSamplingIterations, (int)_animatedWavesDisplacementSamplingIterations);
 
-                if (_renderer.sharedMaterial.IsKeywordEnabled("_SHAPE_BOX"))
+                if (_transform != null)
                 {
-                    _mpb.SetVector(sp_SignedDistanceBox, _boxSize * 0.5f);
-
-                    var rotation = Matrix4x4.Rotate(Quaternion.Euler(_rotation));
-                    var rotationCorrection = Matrix4x4.Rotate(Quaternion.Euler(new Vector3(0, 180f, 0)));
-                    _mpb.SetMatrix(sp_SignedDistanceRotation, rotation.inverse * rotationCorrection);
-                }
-                else if (_renderer.sharedMaterial.IsKeywordEnabled("_SHAPE_SPHERE"))
-                {
-                    _mpb.SetFloat(sp_SignedDistanceSphere, _sphereRadius);
+                    _mpb.SetMatrix(sp_SignedDistanceShapeMatrix, Matrix4x4.TRS(_transform.position, _transform.rotation, _transform.lossyScale).inverse);
                 }
 
                 _renderer.SetPropertyBlock(_mpb.materialPropertyBlock);
@@ -131,7 +119,7 @@ namespace Crest
         {
             base.OnDrawGizmosSelected();
 
-            if (_renderer == null)
+            if (_renderer == null || _transform == null)
             {
                 return;
             }
@@ -140,26 +128,25 @@ namespace Crest
             color.a = 0.9f;
 
             Gizmos.color = color;
-            Gizmos.matrix = Matrix4x4.TRS(transform.position, Quaternion.Euler(_rotation), Vector3.one);
+            Gizmos.matrix = Matrix4x4.TRS(_transform.position, _transform.rotation, _transform.lossyScale);
 
             if (_renderer.sharedMaterial.IsKeywordEnabled("_SHAPE_BOX"))
             {
-                Gizmos.DrawCube(Vector3.zero, _boxSize);
+                Gizmos.DrawCube(Vector3.zero, Vector3.one);
                 Gizmos.color = Color.magenta;
-                Gizmos.DrawWireCube(Vector3.zero, _boxSize);
+                Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
             }
             else if (_renderer.sharedMaterial.IsKeywordEnabled("_SHAPE_SPHERE"))
             {
                 if (s_SphereMesh == null)
                 {
                     s_SphereMesh = Resources.GetBuiltinResource<Mesh>("New-Sphere.fbx");
-                    Debug.Log($"_sphereMesh {s_SphereMesh}");
                 }
 
                 // Gizmos.DrawSphere is too low resolution.
-                Gizmos.DrawMesh(s_SphereMesh, submeshIndex: 0, Vector3.zero, Quaternion.identity, Vector3.one * (_sphereRadius * 2f));
+                Gizmos.DrawMesh(s_SphereMesh, submeshIndex: 0, Vector3.zero, Quaternion.identity, Vector3.one);
                 Gizmos.color = Color.magenta;
-                Gizmos.DrawWireSphere(Vector3.zero, _sphereRadius);
+                Gizmos.DrawWireSphere(Vector3.zero, 1f);
             }
         }
 #endif
