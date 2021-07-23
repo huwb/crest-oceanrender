@@ -7,9 +7,9 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: ClipSurfaceSignedDistance
+  m_Name: ClipSurfaceSignedDistanceSphere
   m_Shader: {fileID: 4800000, guid: 5529458a2151d4ae9bff760ee776ff63, type: 3}
-  m_ShaderKeywords: _PRIMITIVE_NONE _SHAPE_BOX
+  m_ShaderKeywords: _PRIMITIVE_NONE _SHAPE_SPHERE
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
@@ -21,6 +21,6 @@ Material:
     m_TexEnvs: []
     m_Floats:
     - _Primitive: 0
-    - _Shape: 1
+    - _Shape: 0
     m_Colors: []
   m_BuildTextureStacks: []
