@@ -65,6 +65,22 @@ namespace Crest
             }
         }
 
+        bool _isSignedDistanceShape;
+
+        protected override void Start()
+        {
+            base.Start();
+            _isSignedDistanceShape = _renderer.sharedMaterial.shader.name.EndsWith("Signed Distance");
+        }
+
+#if UNITY_EDITOR
+        protected override void Update()
+        {
+            base.Update();
+            _isSignedDistanceShape = _renderer.sharedMaterial.shader.name.EndsWith("Signed Distance");
+        }
+#endif
+
         public override void Draw(CommandBuffer buf, float weight, int isTransition, int lodIdx)
         {
             if (weight <= 0f || !_renderer || !_material)
@@ -76,7 +92,7 @@ namespace Crest
             buf.SetGlobalFloat(LodDataMgr.sp_LD_SliceIndex, lodIdx);
             buf.SetGlobalVector(sp_DisplacementAtInputPosition, Vector3.zero);
 
-            if (_renderer.sharedMaterial.shader.name.EndsWith("Signed Distance"))
+            if (_isSignedDistanceShape)
             {
                 if (s_Quad == null)
                 {
@@ -138,7 +154,7 @@ namespace Crest
                 _mpb.SetInt(LodDataMgr.sp_LD_SliceIndex, lodIdx);
                 _mpb.SetInt(sp_DisplacementSamplingIterations, (int)_animatedWavesDisplacementSamplingIterations);
 
-                if (_renderer.sharedMaterial.shader.name.EndsWith("Signed Distance"))
+                if (_isSignedDistanceShape)
                 {
                     _mpb.SetMatrix(sp_SignedDistanceShapeMatrix, Matrix4x4.TRS(transform.position, transform.rotation, transform.lossyScale).inverse);
                 }
@@ -168,7 +184,7 @@ namespace Crest
 
             Gizmos.color = GizmoColor;
 
-            if (_renderer.sharedMaterial.shader.name.EndsWith("Signed Distance"))
+            if (_isSignedDistanceShape)
             {
                 if (s_Quad == null)
                 {
@@ -203,7 +219,7 @@ namespace Crest
                 var mf = GetComponent<MeshFilter>();
                 if (mf)
                 {
-                    Gizmos.DrawWireMesh(mf.sharedMesh);
+                    Gizmos.DrawWireMesh(mf.sharedMesh, 0, transform.position, transform.rotation, transform.lossyScale);
                 }
             }
         }
