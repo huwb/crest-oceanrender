@@ -483,6 +483,7 @@ Shader "Crest/Ocean"
 				clipVal = lerp(_CrestClipByDefault, clipVal, wt_smallerLod + wt_biggerLod);
 				// Add 0.5 bias for LOD blending and texel resolution correction. This will help to tighten and smooth clipped edges
 				clip(-clipVal + 0.5);
+				return float4(clipVal, 0, 0, 1);
 				#endif
 
 				#if _CLIPUNDERTERRAIN_ON

@@ -245,6 +245,10 @@ namespace Crest
         [Tooltip("Clip surface information for clipping the ocean surface."), SerializeField]
         bool _createClipSurfaceData = false;
         public bool CreateClipSurfaceData { get { return _createClipSurfaceData; } }
+
+        [Predicated("_createClipSurfaceData"), Embedded]
+        public SimSettingsClipSurface _simSettingsClipSurface;
+
         public enum DefaultClippingState
         {
             NothingClipped,
