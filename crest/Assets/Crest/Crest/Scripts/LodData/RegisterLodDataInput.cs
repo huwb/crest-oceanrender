@@ -242,7 +242,7 @@ namespace Crest
 #endif
         }
 
-        protected virtual void OnDrawGizmosSelected()
+        protected void OnDrawGizmosSelected()
         {
             var mf = GetComponent<MeshFilter>();
             if (mf)

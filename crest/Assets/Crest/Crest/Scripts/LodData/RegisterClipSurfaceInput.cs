@@ -2,7 +2,6 @@
 
 // This file is subject to the MIT License as seen in the root of this folder structure (LICENSE)
 
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -36,9 +35,6 @@ namespace Crest
         [Tooltip("Large, choppy waves require higher iterations to have accurate holes.")]
         [SerializeField] uint _animatedWavesDisplacementSamplingIterations = 4;
 
-        [Header("Signed Distance")]
-        public Transform _transform; // TODO
-
         public override float Wavelength => 0f;
 
         protected override Color GizmoColor => new Color(0f, 1f, 1f, 0.5f);
@@ -53,6 +49,53 @@ namespace Crest
 
         static int sp_DisplacementSamplingIterations = Shader.PropertyToID("_DisplacementSamplingIterations");
         static readonly int sp_SignedDistanceShapeMatrix = Shader.PropertyToID("_SignedDistanceShapeMatrix");
+
+        // For rendering signed distance shapes and gizmos.
+        static Mesh s_Quad;
+        Matrix4x4 QuadMatrix
+        {
+            get
+            {
+                var position = transform.position;
+                // Apply sea level to matrix so we can use it for rendering and gizmos.
+                position.y = OceanRenderer.Instance.SeaLevel;
+                var scale = Vector3.one * (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) * 2f);
+                scale.z = 0f;
+                return Matrix4x4.TRS(position, Quaternion.Euler(90f, 0f, 0f), scale);
+            }
+        }
+
+        public override void Draw(CommandBuffer buf, float weight, int isTransition, int lodIdx)
+        {
+            if (weight <= 0f || !_renderer || !_material)
+            {
+                return;
+            }
+
+            buf.SetGlobalFloat(sp_Weight, weight);
+            buf.SetGlobalFloat(LodDataMgr.sp_LD_SliceIndex, lodIdx);
+            buf.SetGlobalVector(sp_DisplacementAtInputPosition, Vector3.zero);
+
+            if (_renderer.sharedMaterial.shader.name.EndsWith("Signed Distance"))
+            {
+                if (s_Quad == null)
+                {
+                    s_Quad = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
+                }
+
+                // Need this here or will see NullReferenceException on recompile.
+                if (_mpb == null)
+                {
+                    _mpb = new PropertyWrapperMPB();
+                }
+
+                buf.DrawMesh(s_Quad, QuadMatrix, _material, submeshIndex: 0, shaderPass: 0, _mpb.materialPropertyBlock);
+            }
+            else
+            {
+                buf.DrawRenderer(_renderer, _material);
+            }
+        }
 
         private void LateUpdate()
         {
@@ -84,6 +127,7 @@ namespace Crest
 
             if (lodIdx > -1)
             {
+                // Need this here or will see NullReferenceException on recompile.
                 if (_mpb == null)
                 {
                     _mpb = new PropertyWrapperMPB();
@@ -94,9 +138,9 @@ namespace Crest
                 _mpb.SetInt(LodDataMgr.sp_LD_SliceIndex, lodIdx);
                 _mpb.SetInt(sp_DisplacementSamplingIterations, (int)_animatedWavesDisplacementSamplingIterations);
 
-                if (_transform != null)
+                if (_renderer.sharedMaterial.shader.name.EndsWith("Signed Distance"))
                 {
-                    _mpb.SetMatrix(sp_SignedDistanceShapeMatrix, Matrix4x4.TRS(_transform.position, _transform.rotation, _transform.lossyScale).inverse);
+                    _mpb.SetMatrix(sp_SignedDistanceShapeMatrix, Matrix4x4.TRS(transform.position, transform.rotation, transform.lossyScale).inverse);
                 }
 
                 _renderer.SetPropertyBlock(_mpb.materialPropertyBlock);
@@ -115,38 +159,52 @@ namespace Crest
 
         static Mesh s_SphereMesh;
 
-        protected override void OnDrawGizmosSelected()
+        protected new void OnDrawGizmosSelected()
         {
-            base.OnDrawGizmosSelected();
-
-            if (_renderer == null || _transform == null)
+            if (_renderer == null)
             {
                 return;
             }
 
-            var color = Color.magenta;
-            color.a = 0.9f;
+            Gizmos.color = GizmoColor;
 
-            Gizmos.color = color;
-            Gizmos.matrix = Matrix4x4.TRS(_transform.position, _transform.rotation, _transform.lossyScale);
-
-            if (_renderer.sharedMaterial.IsKeywordEnabled("_SHAPE_BOX"))
+            if (_renderer.sharedMaterial.shader.name.EndsWith("Signed Distance"))
             {
-                Gizmos.DrawCube(Vector3.zero, Vector3.one);
-                Gizmos.color = Color.magenta;
-                Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
-            }
-            else if (_renderer.sharedMaterial.IsKeywordEnabled("_SHAPE_SPHERE"))
-            {
-                if (s_SphereMesh == null)
+                if (s_Quad == null)
                 {
-                    s_SphereMesh = Resources.GetBuiltinResource<Mesh>("New-Sphere.fbx");
+                    s_Quad = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
                 }
 
-                // Gizmos.DrawSphere is too low resolution.
-                Gizmos.DrawMesh(s_SphereMesh, submeshIndex: 0, Vector3.zero, Quaternion.identity, Vector3.one);
-                Gizmos.color = Color.magenta;
-                Gizmos.DrawWireSphere(Vector3.zero, 1f);
+                // Show gizmo for quad which encompasses the shape.
+                Gizmos.matrix = QuadMatrix;
+                Gizmos.DrawWireMesh(s_Quad);
+
+                Gizmos.matrix = transform.localToWorldMatrix;
+
+                if (_renderer.sharedMaterial.IsKeywordEnabled("_SHAPE_BOX"))
+                {
+                    Gizmos.DrawCube(Vector3.zero, Vector3.one);
+                    Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
+                }
+                else if (_renderer.sharedMaterial.IsKeywordEnabled("_SHAPE_SPHERE"))
+                {
+                    if (s_SphereMesh == null)
+                    {
+                        s_SphereMesh = Resources.GetBuiltinResource<Mesh>("New-Sphere.fbx");
+                    }
+
+                    // Gizmos.DrawSphere is too low resolution.
+                    Gizmos.DrawMesh(s_SphereMesh, submeshIndex: 0, Vector3.zero, Quaternion.identity, Vector3.one);
+                    Gizmos.DrawWireSphere(Vector3.zero, 1f);
+                }
+            }
+            else
+            {
+                var mf = GetComponent<MeshFilter>();
+                if (mf)
+                {
+                    Gizmos.DrawWireMesh(mf.sharedMesh);
+                }
             }
         }
 #endif

@@ -85,9 +85,6 @@ Shader "Crest/Inputs/Clip Surface/Signed Distance"
 					_DisplacementSamplingIterations
 				);
 
-				// Move to sea level.
-				surfacePositionWS.y += _OceanCenterPosWorld.y;
-
 				// We only need the height as clip surface is sampled at the displaced position in the ocean shader.
 				positionWS.y += surfacePositionWS.y;
 
